@@ -1,0 +1,230 @@
+package com.jarvis.assistant.wake
+
+import ai.picovoice.porcupine.Porcupine
+import ai.picovoice.porcupine.PorcupineException
+import ai.picovoice.porcupine.PorcupineManager
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
+import android.content.Context
+import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.media.AudioManager
+import android.media.ToneGenerator
+import android.os.IBinder
+import android.util.Log
+import com.jarvis.assistant.JarvisApp
+import com.jarvis.assistant.MainActivity
+import com.jarvis.assistant.R
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+
+/**
+ * Arka planda "Jarvis" kelimesini dinleyen servis (Picovoice Porcupine).
+ * Mikrofon tipinde ön plan servisi olarak çalışır; bildirimde "Jarvis dinliyor" yazar.
+ * Kelime duyulunca Porcupine mikrofonu bırakır, sesli oturum başlar, bitince tekrar dinler.
+ */
+class WakeWordService : Service() {
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var porcupine: PorcupineManager? = null
+    private var listening = false
+    private var inSession = false
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        createChannels(this)
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP) {
+            JarvisApp.instance.settings.wakeEnabled = false
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        try {
+            startForeground(NOTIF_ID, buildNotification("Jarvis dinliyor"), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+        } catch (e: Exception) {
+            // Android 14+: arka plandan mikrofon servisi başlatılamaz. Kullanıcıdan dokunmasını iste.
+            Log.w(TAG, "Ön plan servisi başlatılamadı", e)
+            showTapToStart(this)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        getSystemService(NotificationManager::class.java).cancel(TAP_NOTIF_ID)
+        running.value = true
+
+        val assistant = JarvisApp.instance.assistant
+        // Uygulama içinden mikrofona basılırsa Porcupine mikrofonu bıraksın.
+        assistant.beforeListen = { pauseDetection() }
+        assistant.afterSession = { if (!inSession) resumeDetection() }
+
+        if (porcupine == null) initPorcupine()
+        resumeDetection()
+        return START_STICKY
+    }
+
+    private fun initPorcupine() {
+        val key = JarvisApp.instance.settings.picovoiceKey
+        if (key.isBlank()) {
+            updateNotification("Picovoice anahtarı yok. Ayarlardan girin.")
+            return
+        }
+        try {
+            porcupine = PorcupineManager.Builder()
+                .setAccessKey(key)
+                .setKeyword(Porcupine.BuiltInKeyword.JARVIS)
+                .setSensitivity(0.65f)
+                .setErrorCallback { e ->
+                    Log.w(TAG, "Porcupine hatası", e)
+                    scope.launch { updateNotification("Uyandırma hatası: ${e.message}") }
+                }
+                .build(applicationContext) { scope.launch { onWakeWord() } }
+        } catch (e: PorcupineException) {
+            Log.w(TAG, "Porcupine kurulamadı", e)
+            updateNotification("Uyandırma başlatılamadı: ${e.message}")
+            porcupine = null
+        }
+    }
+
+    private fun pauseDetection() {
+        if (!listening) return
+        runCatching { porcupine?.stop() }
+        listening = false
+    }
+
+    private fun resumeDetection() {
+        if (listening || porcupine == null) return
+        try {
+            porcupine?.start()
+            listening = true
+            updateNotification("Jarvis dinliyor")
+        } catch (e: Exception) {
+            Log.w(TAG, "Dinleme başlatılamadı", e)
+            updateNotification("Mikrofon açılamadı: ${e.message}")
+        }
+    }
+
+    private suspend fun onWakeWord() {
+        if (inSession) return
+        inSession = true
+        pauseDetection()
+        // Kısa bir "bip" ile duyduğunu belli et.
+        runCatching {
+            val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 70)
+            tone.startTone(ToneGenerator.TONE_PROP_BEEP, 120)
+            kotlinx.coroutines.delay(150)
+            tone.release()
+        }
+        try {
+            JarvisApp.instance.assistant.voiceSession()
+        } finally {
+            inSession = false
+            resumeDetection()
+        }
+    }
+
+    override fun onDestroy() {
+        running.value = false
+        val assistant = JarvisApp.instance.assistant
+        assistant.beforeListen = null
+        assistant.afterSession = null
+        runCatching { porcupine?.stop() }
+        runCatching { porcupine?.delete() }
+        porcupine = null
+        scope.cancel()
+        super.onDestroy()
+    }
+
+    private fun updateNotification(text: String) {
+        getSystemService(NotificationManager::class.java).notify(NOTIF_ID, buildNotification(text))
+    }
+
+    private fun buildNotification(text: String): Notification {
+        val open = PendingIntent.getActivity(
+            this, 0, Intent(this, MainActivity::class.java),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val stop = PendingIntent.getService(
+            this, 1, Intent(this, WakeWordService::class.java).setAction(ACTION_STOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        return Notification.Builder(this, CHANNEL_WAKE)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Jarvis")
+            .setContentText(text)
+            .setContentIntent(open)
+            .setOngoing(true)
+            .addAction(Notification.Action.Builder(null, "Kapat", stop).build())
+            .build()
+    }
+
+    companion object {
+        private const val TAG = "JarvisWake"
+        private const val CHANNEL_WAKE = "jarvis_wake"
+        private const val CHANNEL_ALERT = "jarvis_alert"
+        private const val NOTIF_ID = 42
+        private const val TAP_NOTIF_ID = 43
+        const val ACTION_STOP = "com.jarvis.assistant.STOP_WAKE"
+        const val EXTRA_START_WAKE = "start_wake"
+
+        /** Servis çalışıyor mu? Ayarlar ekranı bunu gösterir. */
+        val running = MutableStateFlow(false)
+        val isRunning: StateFlow<Boolean> get() = running
+
+        fun start(ctx: Context) {
+            try {
+                ctx.startForegroundService(Intent(ctx, WakeWordService::class.java))
+            } catch (e: Exception) {
+                Log.w(TAG, "Servis başlatılamadı", e)
+                showTapToStart(ctx)
+            }
+        }
+
+        fun stop(ctx: Context) {
+            ctx.stopService(Intent(ctx, WakeWordService::class.java))
+        }
+
+        fun createChannels(ctx: Context) {
+            val nm = ctx.getSystemService(NotificationManager::class.java)
+            nm.createNotificationChannel(
+                NotificationChannel(CHANNEL_WAKE, "Uyandırma kelimesi", NotificationManager.IMPORTANCE_LOW).apply {
+                    description = "Jarvis arka planda dinlerken görünen bildirim"
+                    setShowBadge(false)
+                },
+            )
+            nm.createNotificationChannel(
+                NotificationChannel(CHANNEL_ALERT, "Jarvis uyarıları", NotificationManager.IMPORTANCE_HIGH),
+            )
+        }
+
+        /** "Jarvis'i başlatmak için dokun" bildirimi (telefon yeniden başlayınca vb.). */
+        fun showTapToStart(ctx: Context) {
+            createChannels(ctx)
+            val pi = PendingIntent.getActivity(
+                ctx, 2,
+                Intent(ctx, MainActivity::class.java)
+                    .putExtra(EXTRA_START_WAKE, true)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+            val n = Notification.Builder(ctx, CHANNEL_ALERT)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle("Jarvis uyuyor")
+                .setContentText("Jarvis'i başlatmak için dokun")
+                .setContentIntent(pi)
+                .setAutoCancel(true)
+                .build()
+            runCatching { ctx.getSystemService(NotificationManager::class.java).notify(TAP_NOTIF_ID, n) }
+        }
+    }
+}

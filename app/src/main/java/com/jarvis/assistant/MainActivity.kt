@@ -1,6 +1,7 @@
 package com.jarvis.assistant
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -16,6 +17,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jarvis.assistant.ui.ChatScreen
 import com.jarvis.assistant.ui.VoiceSettingsScreen
 import com.jarvis.assistant.ui.theme.JarvisTheme
+import com.jarvis.assistant.wake.WakeWordService
 
 class MainActivity : ComponentActivity() {
 
@@ -28,6 +30,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        handleIntent(intent)
         setContent {
             JarvisTheme {
                 // Basit ekran geçişi: hangi ekranın açık olduğunu tutar.
@@ -50,6 +53,18 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+
+    /** Bildirimden "başlatmak için dokun" ile gelindiyse uyandırma servisini başlat. */
+    private fun handleIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra(WakeWordService.EXTRA_START_WAKE, false) == true) {
+            WakeWordService.start(this)
         }
     }
 

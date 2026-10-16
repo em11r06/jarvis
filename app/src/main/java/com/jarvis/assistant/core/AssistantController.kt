@@ -44,6 +44,10 @@ class AssistantController(
     private val busy = Mutex()
     private var sessionJob: Job? = null
 
+    /** Uyandırma servisi bunları ayarlar: dinlemeden önce mikrofonu bırakır, sonra geri alır. */
+    var beforeListen: (() -> Unit)? = null
+    var afterSession: (() -> Unit)? = null
+
     private val _state = MutableStateFlow(AssistantState.IDLE)
     val state: StateFlow<AssistantState> = _state.asStateFlow()
 
@@ -103,6 +107,7 @@ class AssistantController(
             return
         }
         if (busy.isLocked) return
+        beforeListen?.invoke()
         busy.withLock {
             try {
                 var timeout = FIRST_LISTEN_MS
@@ -123,6 +128,8 @@ class AssistantController(
             } finally {
                 _partial.value = ""
                 _state.value = AssistantState.IDLE
+                listener.release()
+                afterSession?.invoke()
             }
         }
     }
