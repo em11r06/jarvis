@@ -20,7 +20,3 @@ jobs:
       - name: APK derle
         run: ./gradlew --no-daemon assembleRelease
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: jarvis-apk
-          path: app/build/outputs/apk/release/*.apk

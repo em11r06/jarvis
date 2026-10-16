@@ -47,6 +47,7 @@ import com.jarvis.assistant.ui.theme.JarvisSurfaceHigh
 fun ChatScreen(
     bubbles: List<ChatBubble>,
     state: AssistantState,
+    partial: String,
     onSend: (String) -> Unit,
     onMic: () -> Unit,
     onSettings: () -> Unit,
@@ -96,6 +97,14 @@ fun ChatScreen(
                     fontSize = 14.sp,
                     modifier = Modifier.padding(top = 4.dp),
                 )
+                if (partial.isNotBlank()) {
+                    Text(
+                        partial,
+                        color = JarvisCyan,
+                        fontSize = 15.sp,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+                    )
+                }
             }
         }
 
