@@ -111,7 +111,7 @@ sonraki ilk güncellemede imza değişeceği için Jarvis'i **bir kez kaldırıp
 - "Ekran görüntüsü al", "ekranı kilitle", "telefonu yeniden başlat"
 
 Cevaptan sonra birkaç saniye (Ayarlar > Takip dinleme süresi) "Jarvis" demeden devam
-edebilirsin. "Tamam", "teşekkürler", "dur" gibi bir sözle oturumu bitirebilirsin.
+edebilirsin. "Teşekkürler", "sağ ol", "bu kadar" gibi bir sözle oturumu bitirebilirsin ("tamam" bilerek yok, çünkü onay cevabı olabilir).
 
 ## 6. Proje yapısı (programlamaya yeni başlayanlar için)
 

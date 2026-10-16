@@ -5,6 +5,9 @@ import android.util.Log
 import com.jarvis.assistant.data.HistoryStore
 import com.jarvis.assistant.data.Settings
 import com.jarvis.assistant.tools.ToolRegistry
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -61,7 +64,10 @@ class Agent(
                     "Hata: '${call.name}' adında araç yok."
                 } else {
                     try {
-                        tool.run(context, call.args)
+                        // Araçlar ana iş parçacığını (arayüzü) yormasın.
+                        withContext(Dispatchers.Default) { tool.run(context, call.args) }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Log.w(TAG, "Araç hatası ${call.name}", e)
                         "Hata: ${e.message ?: e.javaClass.simpleName}"

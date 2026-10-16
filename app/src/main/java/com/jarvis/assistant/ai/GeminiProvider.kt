@@ -26,7 +26,11 @@ class GeminiProvider(
         if (tools.isNotEmpty()) {
             val decls = JSONArray()
             tools.forEach {
-                decls.put(JSONObject().put("name", it.name).put("description", it.description).put("parameters", it.parameters))
+                val d = JSONObject().put("name", it.name).put("description", it.description)
+                // Gemini boş "properties" olan nesne şemasını kabul etmiyor; parametresiz araçta şemayı gönderme.
+                val props = it.parameters.optJSONObject("properties")
+                if (props != null && props.length() > 0) d.put("parameters", it.parameters)
+                decls.put(d)
             }
             body.put("tools", JSONArray().put(JSONObject().put("functionDeclarations", decls)))
         }

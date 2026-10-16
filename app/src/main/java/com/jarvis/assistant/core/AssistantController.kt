@@ -169,7 +169,7 @@ class AssistantController(
 
     private fun isStopWord(t: String): Boolean {
         val s = t.lowercase().trim().trimEnd('.', '!')
-        return s in setOf("tamam", "teşekkürler", "teşekkür ederim", "sağ ol", "sağol", "kapat", "dur", "yeter", "görüşürüz")
+        return s in setOf("teşekkürler", "teşekkür ederim", "sağ ol", "sağolun", "sağol", "yeter", "bu kadar", "görüşürüz")
     }
 
     private companion object {
