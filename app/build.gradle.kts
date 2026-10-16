@@ -5,8 +5,8 @@ plugins {
 }
 
 // İmza bilgileri ortam değişkenlerinden okunur (GitHub Actions secrets).
-// Yoksa debug anahtarı kullanılır; böylece yerel derleme de çalışır.
-val releaseKeystore = System.getenv("JARVIS_KEYSTORE_FILE")?.let { file(it) }?.takeIf { it.exists() }
+// Secret yoksa debug anahtarı kullanılır; böylece yerel derleme de çalışır.
+val releaseKeystore = System.getenv("JARVIS_KEYSTORE_FILE")?.let { file(it) }?.takeIf { it.exists() && it.length() > 0 }
 
 android {
     namespace = "com.jarvis.assistant"

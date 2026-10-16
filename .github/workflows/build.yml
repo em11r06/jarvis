@@ -1,8 +1,17 @@
-name: APK Derle
+name: APK Derle ve Yayınla
 
+# Her push'ta APK derlenir ve "latest" adlı GitHub Release'e eklenir.
 on:
   push:
+    branches: ["**"]
   workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-latest
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -17,6 +26,43 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: APK derle
-        run: ./gradlew --no-daemon assembleRelease
+      # Secret yoksa geçici çözüm: debug anahtarını önbellekte tut ki imza her derlemede aynı kalsın.
+      - name: Debug anahtarını önbellekten al
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: jarvis-debug-keystore-v1
 
+      # Secret girildiyse kendi sabit imza anahtarını kullan (önerilen).
+      - name: İmza anahtarını hazırla
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "JARVIS_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+            echo "Kendi imza anahtarınız kullanılıyor."
+          else
+            echo "::warning::KEYSTORE_BASE64 secret yok, önbellekteki debug anahtarı kullanılıyor. README'deki adımlarla secret ekleyin."
+          fi
+
+      - name: APK derle
+        env:
+          JARVIS_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          JARVIS_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          JARVIS_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          ./gradlew --no-daemon assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/Jarvis.apk"
+
+      - name: "\"latest\" sürümünü güncelle"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag --repo "$GITHUB_REPOSITORY" || true
+          gh release create latest "$RUNNER_TEMP/Jarvis.apk" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Jarvis (son sürüm #$GITHUB_RUN_NUMBER)" \
+            --notes "Otomatik derleme. Commit: ${GITHUB_SHA::7} ($GITHUB_REF_NAME). Telefondan Jarvis.apk dosyasını indirip kurun." \
+            --latest
