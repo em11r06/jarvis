@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Jarvis</string>
+    <string name="accessibility_description">Jarvis bu izinle ekranı okuyabilir, sizin için dokunabilir ve yazabilir; böylece sesli komutla uygulamalarda işlem yapar. Ayrıca arka plandan uygulama açmak ve telefon açıldığında dinlemeyi başlatmak için kullanılır. Ekran içeriği yalnızca siz bir komut verdiğinizde, seçtiğiniz yapay zeka hizmetine gönderilir.</string>
 </resources>

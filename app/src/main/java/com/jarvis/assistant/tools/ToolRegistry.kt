@@ -24,6 +24,17 @@ object ToolRegistry {
         FenerTool(),
         SaatTarihTool(),
         PilDurumuTool(),
+        // Ekran kontrolü (erişilebilirlik servisi)
+        EkraniOkuTool(),
+        DokunTool(),
+        YazTool(),
+        KaydirTool(),
+        GeriTool(),
+        AnaEkranTool(),
+        BildirimlerTool(),
+        EkranGoruntusuTool(),
+        EkraniKilitleTool(),
+        YenidenBaslatTool(),
     )
 
     fun find(name: String): Tool? = all.firstOrNull { it.name == name }
