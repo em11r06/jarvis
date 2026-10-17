@@ -172,8 +172,10 @@ Kelimeyi değiştirince **Uygula**'ya bas. Picovoice sadece "jarvis" ile çalı�
 
 Ayarlar > Uyandırma > **Uyanınca**: söz (söyleyeceği cümleleri sen yazarsın, her satıra bir tane), bip, **kendi sesin**
 (bir mp3/ogg/wav seç, ilk 5 saniyesi çalar) ya da sessiz. **Dene** ile dinleyebilirsin.
-Ses tanıma artık 8 örnek alıyor ve eşiği daha doğru hesaplıyor. Seni ilk seferde tanımazsa hemen bir daha "Jarvis" de:
-kabul eder ve o sesi öğrenir, zamanla daha iyi tanır. Eski sürümde ses kaydettiysen bir kez **Yeniden kaydet** yap.
+Ses tanıma 8 örnek alıyor ve eşiği buna göre hesaplıyor. Yanlışlıkla uyanmasın diye kurallar sıkı: kelime yüksek güvenle
+duyulmalı ve ses senin sesine benzemeli; Jarvis kendi kendine "öğrenmez". Uyandıktan sonra konuşan sen değilsen (TV, başka biri)
+o ses yok sayılır. Seni zor tanıyorsa seçiciliği biraz düşür ya da sessiz bir yerde yeniden kaydet.
+Tek heceli kelimeler ("can") günlük konuşmada çok geçtiği için "hey can" gibi iki kelimelik bir ifade öner.
 
 ## 5. Kullanım örnekleri
 

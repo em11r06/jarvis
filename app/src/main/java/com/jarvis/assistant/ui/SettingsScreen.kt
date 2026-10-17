@@ -319,7 +319,7 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
 
             SectionTitle("Sesimi tanı")
             Text(
-                if (hasPrint) "Sesiniz kayıtlı: Jarvis sadece size tepki verir (eşik ${"%.2f".format(threshold)}). İlk seferde tanımazsa hemen bir daha \"Jarvis\" deyin; kabul eder ve sesinizi öğrenir. Eski sürümde kaydettiyseniz bir kez \"Yeniden kaydet\" yapın."
+                if (hasPrint) "Sesiniz kayıtlı: Jarvis sadece size tepki verir (eşik ${"%.2f".format(threshold)}). Sizi zor tanıyorsa seçiciliği biraz düşürün ya da sessiz bir yerde yeniden kaydedin."
                 else "Kayıt yok: \"Jarvis\" diyen herkese (ve bazen şarkılara) tepki verebilir. 8 kez \"Jarvis\" diyerek sesinizi tanıtın.",
                 fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
