@@ -59,6 +59,35 @@ jobs:
           echo "jarvis sözlükte geçiyor mu:"; grep -rac "jarvis" app/src/main/assets/model-en-us || true
           du -sh app/src/main/assets/model-en-us
 
+      # Geçici teşhis: Türkçe model "can" kelimesini grammar ile tanıyor mu?
+      - name: Türkçe uyandırma kelimesi testi
+        continue-on-error: true
+        run: |
+          sudo apt-get install -y -qq espeak-ng >/dev/null
+          pip install -q vosk
+          curl -fsSL -o /tmp/tr.zip https://alphacephei.com/vosk/models/vosk-model-small-tr-0.3.zip
+          unzip -q /tmp/tr.zip -d /tmp/trm
+          find /tmp/trm -maxdepth 3 | head -40
+          for w in can jarvis "hey can"; do
+            espeak-ng -v tr -s 140 -w "/tmp/$(echo $w | tr ' ' _).wav" "$w"
+          done
+          cat > /tmp/t.py <<'PY'
+          import json, wave, subprocess, glob, sys
+          from vosk import Model, KaldiRecognizer, SetLogLevel
+          SetLogLevel(0)
+          tr = Model(glob.glob("/tmp/trm/*")[0])
+          en = Model(glob.glob("vosk-model/vosk-model-small-en-us-0.15")[0])
+          for f in sorted(glob.glob("/tmp/*.wav")):
+              raw = subprocess.run(["ffmpeg","-loglevel","quiet","-i",f,"-ar","16000","-ac","1","-f","s16le","-"],capture_output=True).stdout
+              for name, m in (("tr", tr), ("en", en)):
+                  for g in ('["can", "jarvis", "hey can", "[unk]"]', None):
+                      r = KaldiRecognizer(m, 16000, g) if g else KaldiRecognizer(m, 16000)
+                      r.SetWords(True)
+                      r.AcceptWaveform(raw)
+                      print(f, name, "grammar" if g else "free", r.FinalResult().replace("\n"," "))
+          PY
+          python3 /tmp/t.py 2>&1 | grep -v "^LOG" | tail -60
+
       # Secret yoksa geçici çözüm: depoya girmeyen, sadece Actions önbelleğinde duran sabit bir
       # anahtar. Böylece imza her derlemede aynı kalır. (Kalıcı çözüm: README'deki secret'lar.)
       - name: Geçici imza anahtarını önbellekten al
