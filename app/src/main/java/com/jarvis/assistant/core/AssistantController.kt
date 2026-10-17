@@ -147,7 +147,7 @@ class AssistantController(
                     _state.value = AssistantState.LISTENING
                     val hints = kotlinx.coroutines.withContext(Dispatchers.IO) { SpeechHints.get(context) }
                     listener.hints = hints
-                    val heardFull = listenOnce(timeout, hints)
+                    val heardFull = listenOnce(timeout, hints, followUp = timeout != FIRST_LISTEN_MS)
                     val heard = heardFull?.text
                     _partial.value = ""
                     if (heard.isNullOrBlank()) break
@@ -178,7 +178,7 @@ class AssistantController(
      * Bir kez dinler. İnternet ve Gemini anahtarı varsa gelişmiş (Gemini) tanıma, yoksa ya da
      * hata olursa telefonun tanıyıcısı kullanılır.
      */
-    private suspend fun listenOnce(timeout: Long, hints: List<String>): com.jarvis.assistant.speech.Heard? {
+    private suspend fun listenOnce(timeout: Long, hints: List<String>, followUp: Boolean): com.jarvis.assistant.speech.Heard? {
         val cloud = settings.cloudStt && settings.geminiKey.isNotBlank() && Network.isOnline(context) &&
             !com.jarvis.assistant.ai.GeminiQuota.billingBlocked()
         if (cloud) {
@@ -186,12 +186,26 @@ class AssistantController(
             // Sadece Jarvis'in son sözü verilir; kullanıcının eski cümleleri verilirse sessizlikte onları "duymuş" gibi yazabiliyor.
             cloudListener.context_ = history.turns.lastOrNull { it is Turn.Assistant && it.text.isNotBlank() }
                 ?.let { (it as Turn.Assistant).text.take(300) }.orEmpty()
-            when (val r = cloudListener.listen(timeout) { _partial.value = it }) {
-                is com.jarvis.assistant.speech.CloudListener.Result.Text -> return r.heard
-                is com.jarvis.assistant.speech.CloudListener.Result.NoSpeech -> return null
-                is com.jarvis.assistant.speech.CloudListener.Result.Failed -> {
-                    // Gemini'ye ulaşılamadı: bu sefer telefonun tanıyıcısıyla tekrar dinle.
-                    speaker.speakShort("Tekrar söyler misiniz?")
+            for (attempt in 0..1) {
+                when (val r = cloudListener.listen(timeout) { _partial.value = it }) {
+                    is com.jarvis.assistant.speech.CloudListener.Result.Text -> return r.heard
+                    is com.jarvis.assistant.speech.CloudListener.Result.NoSpeech -> return null
+                    is com.jarvis.assistant.speech.CloudListener.Result.NotUser -> {
+                        // Takip dinlemesinde ortam sesi olabilir: sessizce bitir. İlk dinlemede kullanıcıya söyle.
+                        _partial.value = ""
+                        if (!followUp) speaker.speakShort("Sesinizi tanıyamadım efendim.")
+                        return null
+                    }
+                    is com.jarvis.assistant.speech.CloudListener.Result.Unclear -> {
+                        _partial.value = ""
+                        if (attempt == 1 || followUp) return null
+                        speaker.speakShort("Anlayamadım, tekrar söyler misiniz?")
+                    }
+                    is com.jarvis.assistant.speech.CloudListener.Result.Failed -> {
+                        // Gemini'ye ulaşılamadı: bu sefer telefonun tanıyıcısıyla tekrar dinle.
+                        speaker.speakShort("Tekrar söyler misiniz?")
+                        break
+                    }
                 }
             }
         }

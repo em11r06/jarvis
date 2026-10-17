@@ -30,6 +30,10 @@ class CloudListener(private val context: Context, private val settings: Settings
     sealed class Result {
         data class Text(val heard: Heard) : Result()
         object NoSpeech : Result()
+        /** Konuşma var ama sesi kullanıcıya benzemiyor (TV, başka biri). */
+        object NotUser : Result()
+        /** Konuşma kaydedildi ama anlaşılamadı. */
+        object Unclear : Result()
         object Failed : Result()
     }
 
@@ -48,13 +52,13 @@ class CloudListener(private val context: Context, private val settings: Settings
         // Uyandıktan sonra konuşan kullanıcı değilse (TV, başka biri) yok say.
         if (!com.jarvis.assistant.wake.VoiceId.commandIsUser(context, settings, pcm)) {
             Log.d(TAG, "Konuşan kullanıcı değil, yok sayıldı")
-            return Result.NoSpeech
+            return Result.NotUser
         }
         onPartial("Anlıyorum…")
         val text = runCatching { transcribe(pcm) }
             .onFailure { Log.w(TAG, "Gemini yazıya dökemedi", it) }
             .getOrElse { return Result.Failed }
-        return if (text.isNullOrBlank()) Result.NoSpeech else Result.Text(Heard(text, emptyList(), 1f))
+        return if (text.isNullOrBlank()) Result.Unclear else Result.Text(Heard(text, emptyList(), 1f))
     }
 
     /**
@@ -104,7 +108,7 @@ class CloudListener(private val context: Context, private val settings: Settings
                 if (frames <= 15) { // ilk 300 ms: ortam gürültüsü
                     noise = if (frames == 1) rms else noise * 0.8 + rms * 0.2
                 }
-                val threshold = maxOf(noise * 3.0, 600.0)
+                val threshold = maxOf(noise * 2.5, 300.0)
                 val loud = rms > threshold
                 if (!started) {
                     preRoll.addLast(bytes)
@@ -134,7 +138,7 @@ class CloudListener(private val context: Context, private val settings: Settings
         }
         // Çok kısa ses (öksürük, tık) konuşma sayılmaz.
         // Çok kısa ses (öksürük, tık, kapı) konuşma sayılmaz: en az ~0,4 sn gerçek ses olmalı.
-        return out.toByteArray().takeIf { started && voiced >= 20 }
+        return out.toByteArray().takeIf { started && voiced >= 10 }
     }
 
     private suspend fun transcribe(pcm: ByteArray): String? {

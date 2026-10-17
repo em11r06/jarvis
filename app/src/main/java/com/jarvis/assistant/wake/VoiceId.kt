@@ -360,7 +360,8 @@ object VoiceId {
 
     private const val TAG = "JarvisVoice"
     private const val HEADSET_SLACK = 0.05f
-    private const val COMMAND_SLACK = 0.08f
+    /** Komut sesi sadece açıkça başka birine aitse reddedilir (kayıt kısa "Jarvis" sözlerinden yapıldığı için). */
+    private const val COMMAND_SLACK = 0.22f
     private const val MAX_SAMPLES = 24
     /** Ses tanıtırken alınan örnek sayısı. */
     private const val ENROLL_KEEP = 8
