@@ -100,6 +100,38 @@ class Speaker(private val context: Context, private val settings: Settings) {
         }
     }
 
+    /**
+     * Kısa, sık tekrarlanan cümleler (ör. "Buyrun efendim") için. ElevenLabs sesi bir kez
+     * indirilip telefonda saklanır; sonraki seferlerde internet beklemeden anında çalar.
+     */
+    suspend fun speakShort(text: String) {
+        audio.requestAudioFocus(focus)
+        try {
+            if (settings.ttsMode == Settings.TTS_ELEVEN && settings.elevenKey.isNotBlank() && settings.elevenVoiceId.isNotBlank()) {
+                val ok = runCatching {
+                    val cached = cachedEleven(text, settings.elevenVoiceId)
+                    playFile(cached)
+                    true
+                }.onFailure { Log.w(TAG, "Kısa cümle ElevenLabs ile çalınamadı", it) }.getOrDefault(false)
+                if (ok) return
+            }
+            speakAndroid(text, settings.ttsVoice, settings.ttsRate, settings.ttsPitch)
+        } finally {
+            audio.abandonAudioFocusRequest(focus)
+        }
+    }
+
+    private suspend fun cachedEleven(text: String, voiceId: String): File {
+        val dir = File(context.filesDir, "voice_cache").apply { mkdirs() }
+        val key = (voiceId + "|" + settings.elevenModel + "|" + text).hashCode().toUInt().toString(16)
+        val f = File(dir, "$key.mp3")
+        if (f.exists() && f.length() > 0) return f
+        val tmp = downloadEleven(text, voiceId)
+        tmp.copyTo(f, overwrite = true)
+        tmp.delete()
+        return f
+    }
+
     /** Ses seçme ekranındaki "Dinle" düğmesi için: belirli bir motor/ses ile okur. */
     suspend fun preview(text: String, engine: String, voiceName: String, rate: Float, pitch: Float) {
         stop()
@@ -137,27 +169,30 @@ class Speaker(private val context: Context, private val settings: Settings) {
 
     /** ElevenLabs'ten mp3 alır ve çalar. Başarılıysa true. */
     private suspend fun speakEleven(text: String, voiceId: String): Boolean {
-        val file = withContext(Dispatchers.IO) {
-            val body = JSONObject().put("text", text).put("model_id", settings.elevenModel.ifBlank { "eleven_multilingual_v2" })
-            val req = Request.Builder()
-                .url("https://api.elevenlabs.io/v1/text-to-speech/$voiceId?output_format=mp3_44100_128")
-                .header("xi-api-key", settings.elevenKey)
-                .header("Accept", "audio/mpeg")
-                .post(body.toString().toRequestBody("application/json".toMediaType()))
-                .build()
-            Http.client.newCall(req).execute().use { res ->
-                if (!res.isSuccessful) throw IllegalStateException("ElevenLabs ${res.code}: ${res.body?.string()?.take(200)}")
-                val f = File(context.cacheDir, "eleven_${System.currentTimeMillis()}.mp3")
-                f.outputStream().use { out -> res.body!!.byteStream().copyTo(out) }
-                f
-            }
-        }
+        val file = downloadEleven(text, voiceId)
         try {
             playFile(file)
         } finally {
             file.delete()
         }
         return true
+    }
+
+    /** ElevenLabs'ten mp3 indirir, geçici dosya olarak döndürür. */
+    private suspend fun downloadEleven(text: String, voiceId: String): File = withContext(Dispatchers.IO) {
+        val body = JSONObject().put("text", text).put("model_id", settings.elevenModel.ifBlank { "eleven_multilingual_v2" })
+        val req = Request.Builder()
+            .url("https://api.elevenlabs.io/v1/text-to-speech/$voiceId?output_format=mp3_44100_128")
+            .header("xi-api-key", settings.elevenKey)
+            .header("Accept", "audio/mpeg")
+            .post(body.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+        Http.client.newCall(req).execute().use { res ->
+            if (!res.isSuccessful) throw IllegalStateException("ElevenLabs ${res.code}: ${res.body?.string()?.take(200)}")
+            val f = File(context.cacheDir, "eleven_${System.nanoTime()}.mp3")
+            f.outputStream().use { out -> res.body!!.byteStream().copyTo(out) }
+            f
+        }
     }
 
     private suspend fun playFile(file: File) = withContext(Dispatchers.Main) {

@@ -115,12 +115,17 @@ class WakeWordService : Service() {
         if (inSession) return
         inSession = true
         pauseDetection()
-        // Kısa bir "bip" ile duyduğunu belli et.
-        runCatching {
-            val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 70)
-            tone.startTone(ToneGenerator.TONE_PROP_BEEP, 120)
-            kotlinx.coroutines.delay(150)
-            tone.release()
+        if (JarvisApp.instance.settings.wakeGreeting) {
+            // "Buyrun efendim" gibi kısa bir cevapla duyduğunu belli et.
+            JarvisApp.instance.assistant.speaker.speakShort(WAKE_REPLIES.random())
+        } else {
+            // Kısa bir "bip" ile duyduğunu belli et.
+            runCatching {
+                val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 70)
+                tone.startTone(ToneGenerator.TONE_PROP_BEEP, 120)
+                kotlinx.coroutines.delay(150)
+                tone.release()
+            }
         }
         try {
             JarvisApp.instance.assistant.voiceSession()
@@ -172,6 +177,9 @@ class WakeWordService : Service() {
         private const val TAP_NOTIF_ID = 43
         const val ACTION_STOP = "com.jarvis.assistant.STOP_WAKE"
         const val EXTRA_START_WAKE = "start_wake"
+
+        /** Uyanınca söylenen kısa cevaplar; her seferinde rastgele biri seçilir. */
+        val WAKE_REPLIES = listOf("Buyrun efendim.", "Efendim?", "Dinliyorum.", "Buyrun.", "Emrinizdeyim.")
 
         /** Servis çalışıyor mu? Ayarlar ekranı bunu gösterir. */
         val running = MutableStateFlow(false)

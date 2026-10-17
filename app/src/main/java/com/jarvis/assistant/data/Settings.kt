@@ -35,6 +35,8 @@ class Settings(context: Context) {
     var picovoiceKey by str("picovoice_key", "")
     var wakeEnabled by bool("wake_enabled", false)
     var followUpSeconds by int("follow_up_seconds", 6)
+    /** Uyanınca bip yerine "Buyrun efendim" gibi sesli cevap ver. */
+    var wakeGreeting by bool("wake_greeting", true)
 
     var setupDone by bool("setup_done", false)
 

@@ -57,6 +57,7 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
     var picoKey by remember { mutableStateOf(s.picovoiceKey) }
     var elevenKey by remember { mutableStateOf(s.elevenKey) }
     var wake by remember { mutableStateOf(s.wakeEnabled) }
+    var greeting by remember { mutableStateOf(s.wakeGreeting) }
     var follow by remember { mutableFloatStateOf(s.followUpSeconds.toFloat()) }
     var confirmClear by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
@@ -130,6 +131,16 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
                 })
             }
             if (message.isNotBlank()) Text(message, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text("Uyanınca sesli cevap ver", color = MaterialTheme.colorScheme.onSurface)
+                    Text(
+                        if (greeting) "\"Buyrun efendim\" gibi kısa bir cevap" else "Kısa bir bip sesi",
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = greeting, onCheckedChange = { greeting = it; s.wakeGreeting = it })
+            }
 
             SectionTitle("Takip dinleme süresi: ${follow.roundToInt()} sn")
             Text(
