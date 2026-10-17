@@ -69,6 +69,7 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
     var wakeSound by remember { mutableStateOf(s.wakeSound) }
     var wakeWords by remember { mutableStateOf(s.wakeWords) }
     var bargeIn by remember { mutableStateOf(s.bargeIn) }
+    var cloudStt by remember { mutableStateOf(s.cloudStt) }
     var headsetMic by remember { mutableStateOf(s.headsetMic) }
     var wordsChanged by remember { mutableStateOf(false) }
     var testingWake by remember { mutableStateOf(false) }
@@ -168,6 +169,17 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
             OutlinedButton(onClick = onVoice) { Text("Ses seç, hız ve ton ayarla") }
             Spacer(Modifier.height(6.dp))
             SecretField("ElevenLabs API anahtarı (isteğe bağlı)", elevenKey, { elevenKey = it; s.elevenKey = it })
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text("Gelişmiş ses tanıma", color = MaterialTheme.colorScheme.onSurface)
+                    Text(
+                        "Söylediklerinizi Gemini yazıya döker: isimleri, argoyu ve hızlı konuşmayı çok daha doğru anlar. " +
+                            "Konuşurken yazı canlı görünmez, bitince çıkar. İnternet yoksa telefonun tanıyıcısı kullanılır.",
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = cloudStt, onCheckedChange = { cloudStt = it; s.cloudStt = it })
+            }
 
             SectionTitle("Uyandırma kelimesi")
             OutlinedTextField(

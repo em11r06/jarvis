@@ -46,6 +46,8 @@ class Settings(context: Context) {
     var wakeGreeting by bool("wake_greeting", true)
     /** Uyandırma kelimeleri, virgülle ayrılmış (ör. "jarvis, can"). */
     var wakeWords by str("wake_words", "jarvis")
+    /** Gelişmiş ses tanıma: sesi Gemini'ye yazıya döktür (daha doğru; internet ve Gemini anahtarı gerekir). */
+    var cloudStt by bool("cloud_stt", true)
     /** Jarvis konuşurken uyandırma kelimesiyle sözünü kesebilme. */
     var bargeIn by bool("barge_in", true)
     /** Bluetooth kulaklık takılıyken kulaklığın mikrofonuyla dinle (müzik kalitesi düşer). */

@@ -42,6 +42,7 @@ class AssistantController(
     private val offline = OfflineBrain(context)
     val speaker = Speaker(context, settings)
     private val listener = SpeechListener(context)
+    private val cloudListener = com.jarvis.assistant.speech.CloudListener(context, settings)
     private val busy = Mutex()
     /** Sesli oturum sürüyor mu (araya girme sadece o sırada dinlenir). */
     @Volatile private var inVoiceSession = false
@@ -144,8 +145,9 @@ class AssistantController(
                 var timeout = FIRST_LISTEN_MS
                 while (true) {
                     _state.value = AssistantState.LISTENING
-                    listener.hints = kotlinx.coroutines.withContext(Dispatchers.IO) { SpeechHints.get(context) }
-                    val heardFull = listener.listen(timeout) { _partial.value = it }
+                    val hints = kotlinx.coroutines.withContext(Dispatchers.IO) { SpeechHints.get(context) }
+                    listener.hints = hints
+                    val heardFull = listenOnce(timeout, hints)
                     val heard = heardFull?.text
                     _partial.value = ""
                     if (heard.isNullOrBlank()) break
@@ -170,6 +172,33 @@ class AssistantController(
                 afterSession?.invoke()
             }
         }
+    }
+
+    /**
+     * Bir kez dinler. İnternet ve Gemini anahtarı varsa gelişmiş (Gemini) tanıma, yoksa ya da
+     * hata olursa telefonun tanıyıcısı kullanılır.
+     */
+    private suspend fun listenOnce(timeout: Long, hints: List<String>): com.jarvis.assistant.speech.Heard? {
+        val cloud = settings.cloudStt && settings.geminiKey.isNotBlank() && Network.isOnline(context)
+        if (cloud) {
+            cloudListener.hints = hints
+            cloudListener.context_ = history.turns.takeLast(4).mapNotNull {
+                when (it) {
+                    is Turn.User -> "Kullanıcı: ${it.text.take(150)}"
+                    is Turn.Assistant -> it.text.takeIf { t -> t.isNotBlank() }?.let { t -> "Jarvis: ${t.take(200)}" }
+                    else -> null
+                }
+            }.joinToString(" / ")
+            when (val r = cloudListener.listen(timeout) { _partial.value = it }) {
+                is com.jarvis.assistant.speech.CloudListener.Result.Text -> return r.heard
+                is com.jarvis.assistant.speech.CloudListener.Result.NoSpeech -> return null
+                is com.jarvis.assistant.speech.CloudListener.Result.Failed -> {
+                    // Gemini'ye ulaşılamadı: bu sefer telefonun tanıyıcısıyla tekrar dinle.
+                    speaker.speakShort("Tekrar söyler misiniz?")
+                }
+            }
+        }
+        return listener.listen(timeout) { _partial.value = it }
     }
 
     /** Tek bir isteği işler: yapay zekaya sorar ve cevabı okur. */

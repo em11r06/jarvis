@@ -157,6 +157,10 @@ bırakıp yer açar, **Sohbetleri sil** hepsini siler. Çıkan rehber Ayarlar'da
   ayarına ve mesafeye göre kendisi ayarlar. Dokunuştan sonra ekran değişmezse biraz daha uzun bir kez daha dokunur.
 
 ### Uyanma sesi ve ses tanıma
+**Gelişmiş ses tanıma** (Ayarlar > Ses, varsayılan açık): söylediklerin kaydedilip Gemini'ye yazıya döktürülür;
+rehberindeki isimleri, uygulama adlarını ve konuşmanın bağlamını bildiği için çok daha doğru anlar. İnternet yoksa ya da
+Gemini'ye ulaşılamazsa telefonun kendi tanıyıcısı kullanılır. Her konuşma küçük bir Gemini isteği harcar.
+
 **Sözünü kesmek:** Jarvis konuşurken uyandırma kelimesini söyle; susar ve seni dinler (Ayarlar'dan kapatılabilir).
 **Kulaklıkla:** Kulaklık takılıyken ses kimliği eşiği biraz gevşer. Yine duymazsa "Bluetooth kulaklığın mikrofonunu kullan"ı aç
 (kulaklık görüşme moduna geçtiği için müzik kalitesi düşer).
