@@ -123,16 +123,113 @@ class WhatsappGonderTool : Tool {
         return "${contact.name} kişisine WhatsApp'tan gönderildi."
     }
 
-    /** Türkiye numaralarını uluslararası biçime çevirir: 0532... -> 90532... */
-    private fun waNumber(raw: String): String? {
-        var d = raw.filter { it.isDigit() }
-        if (d.startsWith("00")) d = d.drop(2)
-        if (d.startsWith("0") && d.length == 11) d = "90" + d.drop(1)
-        if (d.length == 10 && d.startsWith("5")) d = "90$d"
-        return d.takeIf { it.length >= 10 }
-    }
-
     companion object {
         val WA_PACKAGES = linkedSetOf("com.whatsapp", "com.whatsapp.w4b")
+
+        /** Türkiye numaralarını uluslararası biçime çevirir: 0532... -> 90532... */
+        fun waNumber(raw: String): String? {
+            var d = raw.filter { it.isDigit() }
+            if (d.startsWith("00")) d = d.drop(2)
+            if (d.startsWith("0") && d.length == 11) d = "90" + d.drop(1)
+            if (d.length == 10 && d.startsWith("5")) d = "90$d"
+            return d.takeIf { it.length >= 10 }
+        }
+    }
+}
+
+/**
+ * WhatsApp'ta bir sohbetin mesajlarını baloncuklardan okur, eski mesajlar için listeyi
+ * kendisi yukarı kaydırır. Kendine attığın mesajlar dahil her sohbette çalışır.
+ */
+class SohbetiOkuTool : Tool {
+    override val name = "sohbeti_oku"
+    override val description =
+        "WhatsApp'ta bir sohbetteki mesajları okur (kullanıcının KENDİNE attığı mesajlar dahil; bunlar bildirim oluşturmadığı için mesajlari_oku göremez). " +
+            "kisi verilirse o sohbeti açar; 'kendim' derse kullanıcının kendi sohbetini açar. kisi verilmezse şu an açık sohbeti okur. " +
+            "Mesajları kopyalamak istenirse sonucu panoya_kopyala ile kopyala."
+    override val parameters = Schema.obj(
+        "kisi" to Schema.str("İsteğe bağlı: kişi adı, numara ya da 'kendim'"),
+        "adet" to Schema.int("En fazla kaç son mesaj okunacak (varsayılan 30)"),
+    )
+
+    override suspend fun run(ctx: Context, args: JSONObject): String {
+        val acc = JarvisAccessibilityService.instance
+            ?: return "Erişilebilirlik servisi kapalı; sohbeti okuyamam."
+        val want = args.optInt("adet", 30).coerceIn(1, 200)
+        val pkg = WhatsappGonderTool.WA_PACKAGES.firstOrNull { ctx.packageManager.getLaunchIntentForPackage(it) != null }
+            ?: return "WhatsApp yüklü değil."
+
+        val who = args.optString("kisi").trim()
+        if (who.isNotEmpty()) {
+            val self = normalizeName(who) in setOf("kendim", "ben", "kendime", "kendi", "kendimle", "kendi sohbetim")
+            val number = if (self) {
+                val own = com.jarvis.assistant.JarvisApp.instance.settings.ownNumber
+                if (own.isBlank()) return "Kullanıcının kendi numarası kayıtlı değil. Kullanıcıdan Jarvis Ayarlar > Mesajlar > 'Kendi numaranız' alanını doldurmasını iste ya da WhatsApp'ta kendi sohbetini açmasını iste, sonra kisi vermeden tekrar çağır."
+                own
+            } else {
+                val (c, options) = Contacts.resolve(ctx, who)
+                c?.number ?: return if (options.isEmpty()) "'$who' rehberde bulunamadı." else "Birden fazla eşleşme var, hangisi? " + options.joinToString { it.name }
+            }
+            val phone = WhatsappGonderTool.waNumber(number) ?: return "Geçerli numara yok."
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://api.whatsapp.com/send?phone=$phone")).setPackage(pkg)
+            if (!Launcher.start(ctx, intent)) return "WhatsApp açılamadı."
+            // Sohbet yüklenene kadar bekle.
+            for (i in 0 until 20) {
+                delay(300)
+                if (acc.nodesById("$pkg:id/message_text").isNotEmpty() || acc.findById("$pkg:id/entry") != null) break
+            }
+            delay(500)
+        }
+
+        if (acc.foregroundPackage() != pkg) return "Ekranda WhatsApp sohbeti açık değil."
+        val collected = mutableListOf<String>()
+        var stale = 0
+        for (round in 0 until 15) {
+            val visible = acc.nodesById("$pkg:id/message_text").mapNotNull { it.text?.toString()?.takeIf { t -> t.isNotBlank() } }
+            val before = collected.size
+            mergeOlder(collected, visible)
+            if (collected.size >= want) break
+            stale = if (collected.size == before) stale + 1 else 0
+            if (stale >= 2) break
+            if (!acc.scrollListBackward(pkg)) break
+            delay(450)
+        }
+        if (collected.isEmpty()) return "Sohbette okunabilir mesaj bulamadım (sadece fotoğraf/ses olabilir)."
+        val last = collected.takeLast(want)
+        return "Sohbetteki son ${last.size} mesaj (eskiden yeniye):\n" + last.mapIndexed { i, t -> "${i + 1}. $t" }.joinToString("\n")
+    }
+
+    /** Yukarı kaydırınca görünen (daha eski) mesajları, çakışan kısmı atlayarak başa ekler. */
+    private fun mergeOlder(collected: MutableList<String>, visible: List<String>) {
+        if (collected.isEmpty()) {
+            collected += visible
+            return
+        }
+        // visible'ın sonu ile collected'ın başı arasındaki en uzun çakışma.
+        var overlap = 0
+        for (k in minOf(visible.size, collected.size) downTo 1) {
+            if (visible.takeLast(k) == collected.take(k)) {
+                overlap = k
+                break
+            }
+        }
+        collected.addAll(0, visible.dropLast(overlap))
+    }
+}
+
+/** Metni panoya kopyalar; kullanıcı istediği yere yapıştırabilir. */
+class PanoyaKopyalaTool : Tool {
+    override val name = "panoya_kopyala"
+    override val description = "Verilen metni panoya kopyalar (kullanıcı sonra istediği yere yapıştırır)."
+    override val parameters = Schema.obj("metin" to Schema.str("Kopyalanacak metin"), required = listOf("metin"))
+
+    override suspend fun run(ctx: Context, args: JSONObject): String {
+        val text = args.optString("metin")
+        if (text.isBlank()) return "Hata: metin boş."
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+            val cm = ctx.getSystemService(android.content.ClipboardManager::class.java)
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("Jarvis", text))
+        }
+        return "Panoya kopyalandı (${text.length} karakter)."
     }
 }

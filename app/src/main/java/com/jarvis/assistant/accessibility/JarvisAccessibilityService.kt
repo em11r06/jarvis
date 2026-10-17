@@ -189,6 +189,24 @@ class JarvisAccessibilityService : AccessibilityService() {
     /** Ön plandaki uygulamanın paket adı (Jarvis değilse). */
     fun foregroundPackage(): String? = rootInActiveWindow?.packageName?.toString()
 
+    /** Verilen paketin penceresinde, kimliği (viewId) bu olan görünür öğeler; ekrandaki sırasıyla. */
+    fun nodesById(viewId: String): List<AccessibilityNodeInfo> =
+        roots().flatMap { it.second.findAccessibilityNodeInfosByViewId(viewId) }.filter { it.isVisibleToUser }
+
+    /** Ekrandaki ilk kaydırılabilir listeyi geriye (yukarı) kaydırır. Kaydırdıysa true. */
+    fun scrollListBackward(pkg: String): Boolean {
+        val root = roots().firstOrNull { it.second.packageName?.toString() == pkg }?.second ?: return false
+        val list = firstScrollable(root) ?: return false
+        return list.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
+    }
+
+    private fun firstScrollable(n: AccessibilityNodeInfo?, depth: Int = 0): AccessibilityNodeInfo? {
+        if (n == null || depth > 40) return null
+        if (n.isScrollable && n.isVisibleToUser) return n
+        for (i in 0 until n.childCount) firstScrollable(n.getChild(i), depth + 1)?.let { return it }
+        return null
+    }
+
     /** Görünen pencerelerde kimliği (viewId) verilen ilk öğe. */
     fun findById(viewId: String): AccessibilityNodeInfo? =
         roots().firstNotNullOfOrNull { it.second.findAccessibilityNodeInfosByViewId(viewId).firstOrNull { n -> n.isVisibleToUser } }

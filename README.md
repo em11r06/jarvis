@@ -117,6 +117,10 @@ Jarvis Ayarlar > **Mesajlar** > Bildirim erişimi ayarı > Jarvis'i aç. (Kısı
 - WhatsApp mesajı: o kişiden bekleyen bildirim varsa bildirimin "Yanıtla"sıyla **tamamen arka planda** gönderilir;
   yoksa sohbet mesaj yazılı açılır, gönder'e basılır ve önceki uygulamaya dönülür (1-2 sn, klavye gerekmez).
 
+- **Kendine attığın WhatsApp mesajları** bildirim oluşturmaz; Jarvis bunları sohbeti açıp baloncuklardan okur
+  (`sohbeti_oku`, eski mesajlar için listeyi kendisi kaydırır). Bunun için Ayarlar > Mesajlar > "Kendi numaranız"ı bir kez yaz.
+  "Kendime attığım son mesajları kopyala" dersen okuyup panoya kopyalar (`panoya_kopyala`).
+
 ## 5. Kullanım örnekleri
 
 - "Jarvis... nasılsın?" (sohbet)

@@ -61,6 +61,7 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
     var wake by remember { mutableStateOf(s.wakeEnabled) }
     var greeting by remember { mutableStateOf(s.wakeGreeting) }
     var hasPrint by remember { mutableStateOf(s.voicePrint.isNotBlank()) }
+    var ownNumber by remember { mutableStateOf(s.ownNumber) }
     var threshold by remember { mutableFloatStateOf(s.voiceThreshold) }
     var enrolling by remember { mutableStateOf(false) }
     var follow by remember { mutableFloatStateOf(s.followUpSeconds.toFloat()) }
@@ -232,6 +233,12 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
                 onClick = { Permissions.open(context, Permissions.notificationAccessIntent()) },
                 modifier = Modifier.padding(top = 6.dp),
             ) { Text("Bildirim erişimi ayarı") }
+            Spacer(Modifier.height(6.dp))
+            OutlinedTextField(
+                ownNumber, { ownNumber = it; s.ownNumber = it },
+                label = { Text("Kendi numaranız (kendinize attığınız WhatsApp mesajları için)") },
+                singleLine = true, modifier = Modifier.fillMaxWidth(),
+            )
 
             SectionTitle("Diğer")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

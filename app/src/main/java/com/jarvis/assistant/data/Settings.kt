@@ -49,6 +49,9 @@ class Settings(context: Context) {
     /** Ses izi benzerlik eşiği; büyüdükçe daha seçici. */
     var voiceThreshold by float("voice_threshold", 0.5f)
 
+    /** Kullanıcının kendi numarası (WhatsApp'ta kendine attığı mesajları açmak için). */
+    var ownNumber by str("own_number", "")
+
     var setupDone by bool("setup_done", false)
 
     private fun str(key: String, def: String) = object : ReadWriteProperty<Any?, String> {
