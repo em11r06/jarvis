@@ -32,6 +32,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -269,6 +270,20 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
                 label = { Text("Kendi numaranız (kendinize attığınız WhatsApp mesajları için)") },
                 singleLine = true, modifier = Modifier.fillMaxWidth(),
             )
+
+            SectionTitle("İnternetsiz sohbet")
+            val nanoStatus by com.jarvis.assistant.ai.NanoModel.status.collectAsStateWithLifecycle()
+            LaunchedEffect(Unit) { com.jarvis.assistant.ai.NanoModel.checkStatus() }
+            Text(
+                "İnternet yokken telefon komutları zaten çalışır. Sohbet için telefonun içindeki yapay zeka (Gemini Nano) kullanılır; " +
+                    "model bir kez indirilir (Wi-Fi önerilir).",
+                fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (nanoStatus.isNotBlank()) Text(nanoStatus, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 4.dp))
+            OutlinedButton(
+                onClick = { scope.launch { com.jarvis.assistant.ai.NanoModel.download() } },
+                modifier = Modifier.padding(top = 6.dp),
+            ) { Text("Modeli indir / yeniden kontrol et") }
 
             SectionTitle("Konuşma tarzım")
             Text(

@@ -145,7 +145,7 @@ class AssistantController(
         val answer = try {
             // İnternet yoksa telefon komutlarını çevrimdışı beyinle yap.
             if (!Network.isOnline(context)) {
-                val reply = offline.handle(text) ?: OfflineBrain.NO_INTERNET
+                val reply = offline.handle(text) ?: offlineChat(text) ?: OfflineBrain.NO_INTERNET
                 history.turns += Turn.User(text)
                 history.turns += Turn.Assistant(reply, emptyList())
                 history.save()
@@ -166,12 +166,25 @@ class AssistantController(
             if (e is kotlinx.coroutines.CancellationException) throw e
             if (Network.isNetworkError(e)) {
                 // Bağlantı koptu: komutsa yine de yap.
-                offline.handle(text) ?: OfflineBrain.NO_INTERNET
+                offline.handle(text) ?: offlineChat(text) ?: OfflineBrain.NO_INTERNET
             } else {
                 "Bir sorun çıktı efendim: ${e.message ?: "bilinmeyen hata"}"
             }
         }
         finish(answer)
+    }
+
+    /** İnternetsiz sohbet: telefondaki Gemini Nano (varsa). */
+    private suspend fun offlineChat(text: String): String? {
+        val recent = history.turns.takeLast(8).mapNotNull {
+            when (it) {
+                is Turn.User -> "Kullanıcı" to it.text
+                is Turn.Assistant -> it.text.takeIf { t -> t.isNotBlank() }?.let { t -> "Jarvis" to t }
+                else -> null
+            }
+        }
+        val style = settings.styleGuide.takeIf { it.isNotBlank() }?.let { "\nKullanıcının konuşma tarzı (onun gibi konuş):\n$it" }.orEmpty()
+        return com.jarvis.assistant.ai.NanoModel.chat(com.jarvis.assistant.ai.NanoModel.OFFLINE_SYSTEM + style, recent, text)
     }
 
     private suspend fun finish(answer: String) {

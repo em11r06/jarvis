@@ -133,8 +133,9 @@ Spotify'da şarkı başlatınca da kullanıcı kaldığı ekrana döner. Ekran k
 İnternet yoksa (ya da bağlantı koparsa) Jarvis telefon komutlarını yapay zekaya sormadan, telefonda anlar:
 alarm, zamanlayıcı, fener, ses, müzik kontrolü (durdur/sonraki/önceki/devam), uygulama açma, arama ve SMS (onaylı), saat ve pil.
 Ses tanıma çevrimdışı Türkçe modeli tercih eder (Google sesle yazma > Çevrimdışı konuşma tanıma > Türkçe indirili olmalı),
-uyandırma zaten çevrimdışıdır, ElevenLabs yerine telefonun sesi kullanılır. İnternetsiz sohbet için telefonda çalışan
-yapay zeka (Gemini Nano) desteği planlanıyor.
+uyandırma zaten çevrimdışıdır, ElevenLabs yerine telefonun sesi kullanılır. İnternetsiz **sohbet** için telefonun içindeki
+yapay zeka (Gemini Nano, ML Kit GenAI Prompt API) kullanılır: Ayarlar > İnternetsiz sohbet > **Modeli indir** (bir kez, Wi-Fi önerilir).
+Nano küçük bir modeldir; cevapları daha basittir ve internette arama yapamaz.
 
 ### Konuşma tarzım
 WhatsApp'ta sohbet > ⋮ > Diğer > **Sohbeti dışa aktar** > **Medya olmadan** > paylaş menüsünden **Jarvis**

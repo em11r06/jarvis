@@ -85,4 +85,6 @@ dependencies {
     // Ücretsiz, çevrimdışı uyandırma kelimesi (Picovoice anahtarı yoksa)
     implementation("com.alphacephei:vosk-android:0.3.75")
     implementation("net.java.dev.jna:jna:5.18.1@aar")
+    // Telefonda çalışan yapay zeka (Gemini Nano) ile internetsiz sohbet
+    implementation("com.google.mlkit:genai-prompt:1.0.0-beta4")
 }

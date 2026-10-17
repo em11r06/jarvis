@@ -106,20 +106,6 @@ jobs:
               print("YT_VIDEO", m.group(1), t and t.group(1))
           PY
 
-      # Gemini Nano (ML Kit GenAI Prompt) kütüphanesinin genel API'sini listeler (entegrasyon için bilgi).
-      - name: Gemini Nano API listesi
-        continue-on-error: true
-        run: |
-          mkdir -p nano && cd nano
-          for a in genai-prompt genai-common; do
-            curl -sSfL -o $a.aar "https://dl.google.com/dl/android/maven2/com/google/mlkit/$a/1.0.0-beta4/$a-1.0.0-beta4.aar" || continue
-            unzip -oq $a.aar classes.jar -d $a && (cd $a && unzip -oq classes.jar)
-            curl -sSfL "https://dl.google.com/dl/android/maven2/com/google/mlkit/$a/1.0.0-beta4/$a-1.0.0-beta4.pom" | grep -A2 "<artifactId>" | grep -v "^--" | head -40
-            for c in $(cd $a && find . -path "*genai*" -name "*.class" ! -name '*$*' | sed 's|^\./||; s|\.class$||; s|/|.|g' | sort); do
-              echo "NANO_API $(javap -public -cp $a $c 2>/dev/null | tr '\n' ' ')"
-            done
-          done
-
       - name: APK derle
         env:
           JARVIS_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -136,12 +122,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete latest --yes --cleanup-tag --repo "$GITHUB_REPOSITORY" || true
-          gh release create latest "$RUNNER_TEMP/Jarvis.apk" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "Jarvis (son sürüm #$GITHUB_RUN_NUMBER)" \
-            --notes "$(git log -1 --pretty=%s)
+          notes="$(git log -1 --pretty=%s)
 
-          Sürüm #$GITHUB_RUN_NUMBER, commit ${GITHUB_SHA::7}. Jarvis bu güncellemeyi kendisi indirir; elle kurmak için Jarvis.apk dosyasını indirin." \
-            --latest
+          Sürüm #$GITHUB_RUN_NUMBER, commit ${GITHUB_SHA::7}. Jarvis bu güncellemeyi kendisi indirir; elle kurmak için Jarvis.apk dosyasını indirin."
+          # Etiket silme/oluşturma bazen kısa süre çakışıyor; birkaç kez dene.
+          for attempt in 1 2 3 4; do
+            gh release delete latest --yes --cleanup-tag --repo "$GITHUB_REPOSITORY" || true
+            sleep $((attempt * 3))
+            if gh release create latest "$RUNNER_TEMP/Jarvis.apk" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "Jarvis (son sürüm #$GITHUB_RUN_NUMBER)" \
+              --notes "$notes" \
+              --latest; then
+              exit 0
+            fi
+          done
+          exit 1

@@ -139,6 +139,6 @@ class OfflineBrain(private val ctx: Context) {
 
         const val NO_INTERNET =
             "İnternet yok efendim. Şu an sadece telefon komutlarını yapabiliyorum: alarm, zamanlayıcı, fener, ses, " +
-                "müzik kontrolü, uygulama açma, arama, SMS, saat ve pil."
+                "müzik kontrolü, uygulama açma, arama, SMS, saat ve pil. İnternetsiz sohbet için Ayarlar'dan telefondaki yapay zekayı indirebilirsiniz."
     }
 }
