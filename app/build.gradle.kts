@@ -18,6 +18,12 @@ android {
         targetSdk = 36
         versionCode = (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1)
         versionName = "1.0.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
+
+        // Sadece 64 bit ARM (tüm güncel telefonlar, S25+ dahil). Ses kütüphanelerinin
+        // diğer işlemci türleri için kopyaları APK'yı gereksiz yere büyütüyordu.
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
     }
 
     signingConfigs {
