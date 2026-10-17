@@ -54,6 +54,11 @@ object GeminiQuota {
         prefs?.edit()?.putLong(model, now + millis)?.apply()
     }
 
+    /** Yeni API anahtarı girilince eski anahtarın "kota doldu" bilgisi geçersizdir; hepsini sıfırla. */
+    fun reset() {
+        prefs?.edit()?.clear()?.apply()
+    }
+
     fun nextPacificMidnight(): Long {
         val zone = ZoneId.of("America/Los_Angeles")
         return ZonedDateTime.now(zone).toLocalDate().plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()

@@ -15,7 +15,14 @@ class Settings(context: Context) {
 
     // Yapay zeka
     var provider by str("provider", PROVIDER_GEMINI)
-    var geminiKey by str("gemini_key", "")
+    var geminiKey: String
+        get() = prefs.getString("gemini_key", "") ?: ""
+        set(value) {
+            val v = value.trim()
+            // Anahtar değişince eski anahtarın kota bilgisi geçersiz: ana modelden yeniden başla.
+            if (v != geminiKey) com.jarvis.assistant.ai.GeminiQuota.reset()
+            prefs.edit().putString("gemini_key", v).apply()
+        }
     var geminiModel by str("gemini_model", "gemini-3.8-flash")
     var claudeKey by str("claude_key", "")
     var claudeModel by str("claude_model", "claude-haiku-4-5")
