@@ -77,10 +77,12 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
     var styleStatus by remember { mutableStateOf("") }
     val pickChats = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) scope.launch {
+            StyleLearner.lastFollowingCount = 0
             val n = StyleLearner.import(context, uris)
+            val f = StyleLearner.lastFollowingCount
             senders = StyleLearner.senders(context)
             if (styleOwner.isBlank()) styleOwner = senders.firstOrNull()?.first.orEmpty()
-            styleStatus = if (n == 0) "Yeni mesaj bulunamadı. Dosya zaten yüklenmiş olabilir; değilse WhatsApp dışa aktarma (.txt/.zip) ya da Instagram bilgi indirme ZIP'i olmalı." else "$n mesaj yüklendi."
+            styleStatus = if (f > 0) "$n mesaj ve $f takip edilen hesap yüklendi." else if (n == 0) "Yeni mesaj bulunamadı. Dosya zaten yüklenmiş olabilir; değilse WhatsApp dışa aktarma (.txt/.zip) ya da Instagram bilgi indirme ZIP'i olmalı." else "$n mesaj yüklendi."
         }
     }
     var threshold by remember { mutableFloatStateOf(s.voiceThreshold) }

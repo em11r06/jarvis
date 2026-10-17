@@ -76,6 +76,12 @@ object StyleLearner {
                     val n = entry.name.lowercase()
                     val isWa = n.endsWith(".txt")
                     val isIg = (n.contains("messages/") || n.contains("inbox/")) && Regex("message_\\d+\\.(json|html)$").containsMatchIn(n)
+                    // Takip edilenler listesi: ilgi alanlarını çıkarmak için.
+                    if (!entry.isDirectory && Regex("(^|/)following\\.(json|html)$").containsMatchIn(n)) {
+                        val txt = readLimited(zip, 8_000_000).toString(Charsets.UTF_8)
+                        val names = if (n.endsWith(".json")) parseFollowingJson(txt) else parseFollowingHtml(txt)
+                        lastFollowingCount += addFollowing(ctx, names)
+                    }
                     if (!entry.isDirectory && (isWa || isIg)) {
                         val bytes = readLimited(zip, 8_000_000)
                         out += parseByName(n, bytes.toString(Charsets.UTF_8))
@@ -227,7 +233,50 @@ object StyleLearner {
 
     fun clear(ctx: Context) {
         file(ctx).delete()
+        followingFile(ctx).delete()
     }
+
+    // ------------------------------------------------------------------
+    // Takip edilen hesaplar (Instagram)
+    // ------------------------------------------------------------------
+
+    /** Son içe aktarmada eklenen takip edilen hesap sayısı (ekranda göstermek için). */
+    @Volatile
+    var lastFollowingCount = 0
+
+    private fun followingFile(ctx: Context) = File(ctx.filesDir, "style_following.json")
+
+    fun loadFollowing(ctx: Context): List<String> = runCatching {
+        val arr = JSONArray(followingFile(ctx).readText())
+        (0 until arr.length()).map { arr.getString(it) }
+    }.getOrDefault(emptyList())
+
+    /** @return yeni eklenen hesap sayısı */
+    private fun addFollowing(ctx: Context, names: List<String>): Int {
+        val set = LinkedHashSet(loadFollowing(ctx))
+        val before = set.size
+        names.map { it.trim().removePrefix("@") }.filter { it.isNotBlank() && it.length <= 40 }.forEach { set += it }
+        followingFile(ctx).writeText(JSONArray(set.toList()).toString())
+        return set.size - before
+    }
+
+    /** {"relationships_following":[{"title":"kullanici","string_list_data":[{"value":"kullanici"}]}]} ya da düz dizi. */
+    private fun parseFollowingJson(text: String): List<String> {
+        val root = runCatching { org.json.JSONTokener(text).nextValue() }.getOrNull() ?: return emptyList()
+        val arr = when (root) {
+            is JSONObject -> root.optJSONArray("relationships_following") ?: root.keys().asSequence().mapNotNull { root.optJSONArray(it) }.firstOrNull()
+            is JSONArray -> root
+            else -> null
+        } ?: return emptyList()
+        return (0 until arr.length()).mapNotNull { i ->
+            val o = arr.optJSONObject(i) ?: return@mapNotNull null
+            o.optJSONArray("string_list_data")?.optJSONObject(0)?.optString("value")?.takeIf { it.isNotBlank() }
+                ?: o.optString("title").takeIf { it.isNotBlank() }
+        }.map { fixMojibake(it) }
+    }
+
+    private fun parseFollowingHtml(text: String): List<String> =
+        org.jsoup.Jsoup.parse(text).select("a[href*=instagram.com]").map { it.text().trim() }.filter { it.isNotBlank() }
 
     /** Sohbetlerdeki kişiler ve mesaj sayıları (kullanıcı kendini seçsin diye). */
     fun senders(ctx: Context): List<Pair<String, Int>> =
@@ -263,9 +312,11 @@ object StyleLearner {
                 if (b.length + t.length < 2500) b.append("- ").append(t.take(250)).append('\n')
                 b
             }
+        val following = loadFollowing(ctx).shuffled().take(600).joinToString(", ").take(6000)
         val humor = buildString {
             if (funny.isNotEmpty()) append("\n\nKişinin GÜLDÜĞÜ mesajlar (başkalarının yazdığı espriler):\n").append(funny)
             if (shares.isNotEmpty()) append("\n\nKişinin arkadaşlarına PAYLAŞTIĞI içeriklerin açıklamaları:\n").append(shares)
+            if (following.isNotEmpty()) append("\n\nKişinin Instagram'da TAKİP ETTİĞİ hesaplar (kullanıcı adları):\n").append(following)
         }
         val system = "Sen bir dil ve üslup analistisin. Türkçe yaz."
         val prompt = """
@@ -288,6 +339,10 @@ $humor
 Güldüğü mesajlar ya da paylaştığı içerikler verildiyse, sonuna "Mizah tarzı:" başlıklı 4-6 madde daha ekle:
 ne tür esprilere güldüğünü (absürt, kara mizah, laf sokma, futbol, kelime oyunu vb.), sevdiği konuları ve asistanın
 ona nasıl espri yapması gerektiğini yaz. Espriyi aynen kopyalama, türünü anlat.
+
+Takip ettiği hesaplar verildiyse, en sona "İlgi alanları:" başlıklı 3-6 madde ekle: tuttuğu takım, sevdiği müzik/sanatçılar,
+hobiler, takip ettiği mizah sayfaları gibi. Sadece ünlü/sayfa/marka hesaplarından çıkarım yap; kişisel arkadaş hesaplarını
+ve kullanıcı adlarını yazma. Asistan bu konuları sohbette ve esprilerde kullanabilsin.
 """.trim()
         val guide = JarvisApp.instance.assistant.agent.oneShot(system, prompt).trim()
         if (guide.isBlank()) return "Analiz yapılamadı, tekrar deneyin."

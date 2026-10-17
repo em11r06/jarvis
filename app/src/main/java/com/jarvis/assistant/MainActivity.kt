@@ -115,8 +115,10 @@ class MainActivity : ComponentActivity() {
                 listOfNotNull(intent.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM))
             }
             if (uris.isNotEmpty()) lifecycleScope.launch {
+                com.jarvis.assistant.style.StyleLearner.lastFollowingCount = 0
                 val n = com.jarvis.assistant.style.StyleLearner.import(this@MainActivity, uris)
-                val msg = if (n == 0) "Yeni mesaj bulunamadı (dosya zaten yüklenmiş olabilir)." else "$n mesaj yüklendi. Ayarlar > Konuşma tarzım'dan analiz edin."
+                val f = com.jarvis.assistant.style.StyleLearner.lastFollowingCount
+                val msg = if (f > 0) "$n mesaj ve $f takip edilen hesap yüklendi. Ayarlar > Konuşma tarzım'dan analiz edin." else if (n == 0) "Yeni mesaj bulunamadı (dosya zaten yüklenmiş olabilir)." else "$n mesaj yüklendi. Ayarlar > Konuşma tarzım'dan analiz edin."
                 android.widget.Toast.makeText(this@MainActivity, msg, android.widget.Toast.LENGTH_LONG).show()
             }
         }

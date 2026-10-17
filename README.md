@@ -144,6 +144,8 @@ WhatsApp'ta sohbet > ⋮ > Diğer > **Sohbeti dışa aktar** > **Medya olmadan**
 **Tarzımı analiz et** de. Mizah tarzı için ayrıca **güldüğün espriler** (Instagram'da 😂/🤣/💀 tepkisi bıraktıkların ya da
 hemen ardından "hahaha", "jsjs", "koptum" gibi cevap verdiklerin; isimsiz, en fazla ~3500 karakter) ve arkadaşlarına
 paylaştığın reels açıklamaları kullanılır (Instagram beğenileri dosyasında içerik olmadığı için kullanılmaz).
+Dışa aktarmada "Takipçiler ve takip edilenler" de seçilirse **takip ettiğin hesaplardan** "İlgi alanları" çıkarılır
+(takım, müzik, hobiler, mizah sayfaları; arkadaş hesapları yok sayılır).
 Bunların dışında yapay zekaya **sadece senin mesajların** gönderilir; çıkan rehber Ayarlar'da düzenlenebilir
 ve Jarvis seninle o tarzda konuşur. Yüklenen sohbetler sadece telefonda saklanır, istendiğinde silinir.
 
