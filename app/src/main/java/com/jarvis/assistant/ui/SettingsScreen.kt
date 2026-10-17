@@ -75,12 +75,14 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
     var styleOwner by remember { mutableStateOf(s.styleOwner) }
     var styleGuide by remember { mutableStateOf(s.styleGuide) }
     var styleStatus by remember { mutableStateOf("") }
+    var styleKb by remember { mutableStateOf(StyleLearner.storageKb(context)) }
     val pickChats = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) scope.launch {
             StyleLearner.lastFollowingCount = 0
             val n = StyleLearner.import(context, uris)
             val f = StyleLearner.lastFollowingCount
             senders = StyleLearner.senders(context)
+            styleKb = StyleLearner.storageKb(context)
             if (styleOwner.isBlank()) styleOwner = senders.firstOrNull()?.first.orEmpty()
             styleStatus = if (f > 0) "$n mesaj ve $f takip edilen hesap yüklendi." else if (n == 0) "Yeni mesaj bulunamadı. Dosya zaten yüklenmiş olabilir; değilse WhatsApp dışa aktarma (.txt/.zip) ya da Instagram bilgi indirme ZIP'i olmalı." else "$n mesaj yüklendi."
         }
@@ -291,8 +293,9 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
             Text(
                 "WhatsApp: sohbette ⋮ > Diğer > Sohbeti dışa aktar > Medya olmadan. Instagram: Hesap Merkezi > Bilgilerin ve izinlerin > " +
                     "Bilgilerini indir (Mesajlar, tercihen JSON) ile gelen ZIP. Dosyayı buraya yükleyin ya da paylaş menüsünden Jarvis'i seçin. " +
-                    "Jarvis SİZİN mesajlarınızı analiz edip sizin gibi konuşur. Mizah tarzınız için ayrıca güldüğünüz espriler " +
-                    "(😂 tepkisi ya da 'hahaha' cevabı verdikleriniz, isimsiz) ve paylaştığınız reels açıklamaları kullanılır.",
+                    "Birden fazla hesap yükleyebilirsiniz (ör. 1 WhatsApp + 2 Instagram); hepsi harmanlanır. " +
+                    "Yapay zekaya SADECE sizin mesajlarınız (her hesaptan adil pay, toplam 200 bin karaktere kadar), paylaştığınız " +
+                    "reels açıklamaları ve takip ettiğiniz hesaplar gider. Arkadaşlarınızın mesajları telefonda kalır.",
                 fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
@@ -300,6 +303,7 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
                 if (senders.isNotEmpty()) OutlinedButton(onClick = {
                     StyleLearner.clear(context)
                     senders = emptyList()
+                    styleKb = 0
                     styleStatus = "Yüklenen sohbetler silindi."
                 }) { Text("Sohbetleri sil") }
             }
@@ -309,7 +313,7 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                 ) {
-                    senders.take(8).forEach { (name, count) ->
+                    senders.take(25).forEach { (name, count) ->
                         // Birden fazla ad seçilebilir (WhatsApp ve Instagram'daki adlarınız farklıysa).
                         val selected = name in ownerSet(styleOwner)
                         FilterChip(selected, {
@@ -335,6 +339,18 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
                     enabled = styleOwner.isNotBlank(),
                     modifier = Modifier.padding(top = 6.dp),
                 ) { Text("Tarzımı analiz et") }
+                Text("Kayıt boyutu: $styleKb KB (sıkıştırılmış)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            val n = StyleLearner.pruneOthers(context, styleOwner)
+                            senders = StyleLearner.senders(context)
+                            styleKb = StyleLearner.storageKb(context)
+                            styleStatus = "Başkalarına ait $n mesaj telefondan silindi; sadece sizinkiler kaldı."
+                        }
+                    },
+                    enabled = styleOwner.isNotBlank(),
+                ) { Text("Başkalarının mesajlarını sil") }
             }
             if (styleStatus.isNotBlank()) Text(styleStatus, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (styleGuide.isNotBlank()) {

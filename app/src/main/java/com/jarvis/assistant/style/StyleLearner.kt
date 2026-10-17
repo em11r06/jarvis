@@ -9,24 +9,30 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 import java.util.zip.ZipInputStream
 
 /** Dışa aktarılmış sohbetteki tek mesaj. */
 data class ChatLine(
     val sender: String,
     val text: String,
-    /** Bu mesaja gülme tepkisi (😂 vb.) bırakanlar, virgülle ayrılmış (Instagram). */
-    val laughBy: String = "",
     /** Gönderenin paylaştığı bir gönderi/reels açıklaması mı? */
     val shared: Boolean = false,
 )
 
 /**
  * WhatsApp ve Instagram sohbet dökümlerinden kullanıcının kendi mesajlarını ayıklar ve
- * yapay zekaya konuşma tarzını analiz ettirir. Karşı tarafın mesajlarından sadece kullanıcının GÜLDÜĞÜ
- * kısa espriler (isimsiz) mizah analizi için gönderilir; diğerleri telefonda kalır.
+ * yapay zekaya konuşma tarzını analiz ettirir. Yapay zekaya SADECE kullanıcının kendi mesajları,
+ * kendi paylaştığı içerik açıklamaları ve takip ettiği hesaplar gider; başkalarının mesajları telefonda kalır.
  */
 object StyleLearner {
+
+    /** Analizde yapay zekaya gönderilen en fazla mesaj metni (karakter). */
+    private const val TOTAL_CHARS = 200_000
+    /** Telefonda saklanan en fazla mesaj sayısı. */
+    private const val MAX_LINES = 150_000
+    private const val MAX_MSG = 500
 
     private fun file(ctx: Context) = File(ctx.filesDir, "style_chats.json")
 
@@ -48,16 +54,16 @@ object StyleLearner {
      */
     suspend fun import(ctx: Context, uris: List<Uri>): Int = withContext(Dispatchers.IO) {
         val all = load(ctx).toMutableList()
+        // Aynı dosya tekrar yüklenirse mesajlar iki kez sayılmasın.
+        val seen = all.mapTo(HashSet()) { it.sender + "\u0000" + it.text }
         var added = 0
         for (uri in uris) {
             val lines = runCatching { readChats(ctx, uri) }.getOrDefault(emptyList())
-            // Aynı dosya tekrar yüklenirse mesajlar iki kez sayılmasın.
-            val seen = all.mapTo(HashSet()) { it.sender + "\u0000" + it.text }
             val fresh = lines.filter { seen.add(it.sender + "\u0000" + it.text) }
             all += fresh
             added += fresh.size
         }
-        save(ctx, all.takeLast(30000))
+        save(ctx, all.takeLast(MAX_LINES))
         added
     }
 
@@ -121,19 +127,9 @@ object StyleLearner {
             val out = mutableListOf<ChatLine>()
             // Paylaşılan reels/gönderi açıklaması: kişinin hoşuna giden içerik türü.
             o.optJSONObject("share")?.optString("share_text")?.takeIf { it.isNotBlank() }?.let {
-                out += ChatLine(sender, fixMojibake(it).take(500), shared = true)
+                out += ChatLine(sender, fixMojibake(it).take(MAX_MSG), shared = true)
             }
-            val content = o.optString("content").takeIf { it.isNotBlank() }
-            if (content != null) {
-                // Bu mesaja gülme tepkisi bırakanlar.
-                val reactions = o.optJSONArray("reactions")
-                val laughers = (0 until (reactions?.length() ?: 0)).mapNotNull { r ->
-                    val re = reactions!!.getJSONObject(r)
-                    val emoji = fixMojibake(re.optString("reaction"))
-                    if (LAUGH_EMOJI.any { emoji.contains(it) }) fixMojibake(re.optString("actor")) else null
-                }
-                out += ChatLine(sender, fixMojibake(content), laughBy = laughers.joinToString(","))
-            }
+            o.optString("content").takeIf { it.isNotBlank() }?.let { out += ChatLine(sender, fixMojibake(it)) }
             out.reversed()
         }.reversed() // Instagram yeniden eskiye verir
             .filter { l -> IG_SKIP.none { l.text.contains(it, ignoreCase = true) } }
@@ -175,7 +171,7 @@ object StyleLearner {
     fun parse(text: String): List<ChatLine> {
         val out = mutableListOf<ChatLine>()
         for (raw in text.lines()) {
-            val line = raw.replace("‎", "").replace(" ", " ").trimEnd()
+            val line = raw.replace("‎", "").replace(" ", " ").trimEnd()
             val m = LINE.find(line)
             if (m != null) {
                 out += ChatLine(m.groupValues[3].trim(), m.groupValues[4])
@@ -188,53 +184,52 @@ object StyleLearner {
         return out.filter { l -> SKIP.none { l.text.trim().lowercase().contains(it) } && l.text.isNotBlank() }
     }
 
+    /** Kayıt sıkıştırılmış (gzip) tutulur; eski sürümlerin düz JSON kaydı da okunur. */
     fun load(ctx: Context): List<ChatLine> = runCatching {
-        val arr = JSONArray(file(ctx).readText())
+        val f = file(ctx)
+        val bytes = f.readBytes()
+        val gz = bytes.size > 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()
+        val text = if (gz) GZIPInputStream(bytes.inputStream()).use { it.readBytes() }.toString(Charsets.UTF_8) else bytes.toString(Charsets.UTF_8)
+        val arr = JSONArray(text)
         (0 until arr.length()).map {
-            arr.getJSONObject(it).let { o ->
-                ChatLine(o.getString("s"), o.getString("t"), o.optString("l"), o.optBoolean("h", false))
-            }
+            arr.getJSONObject(it).let { o -> ChatLine(o.getString("s"), o.getString("t"), o.optBoolean("h", false)) }
         }
     }.getOrDefault(emptyList())
 
     private fun save(ctx: Context, lines: List<ChatLine>) {
         val arr = JSONArray()
         lines.forEach {
-            val o = JSONObject().put("s", it.sender).put("t", it.text)
-            if (it.laughBy.isNotBlank()) o.put("l", it.laughBy)
+            val o = JSONObject().put("s", it.sender).put("t", it.text.take(2000))
             if (it.shared) o.put("h", true)
             arr.put(o)
         }
-        file(ctx).writeText(arr.toString())
+        val tmp = File(ctx.filesDir, "style_chats.tmp")
+        GZIPOutputStream(tmp.outputStream().buffered()).use { it.write(arr.toString().toByteArray(Charsets.UTF_8)) }
+        tmp.renameTo(file(ctx))
     }
 
-    private val LAUGH_EMOJI = listOf("😂", "🤣", "💀", "😹", "😆", "😅")
-
-    /** Kısa bir "gülme" cevabı mı? (hahaha, jsjs, koptum, 😂 ...) */
-    private val LAUGH_REPLY = Regex(
-        "(?i)(\\b(a?h[ae]){2,}|hah|hehe|jsjs|sksk|asdf|kopt|öldüm|gülmekten|gulmekten|😂|🤣|💀|😹|😆)",
-    )
+    /** Kayıtlı sohbetlerin telefonda kapladığı yer (KB). */
+    fun storageKb(ctx: Context): Long = (file(ctx).length() + followingFile(ctx).length()) / 1024
 
     /**
-     * Kullanıcının güldüğü başkalarına ait mesajlar: ya gülme tepkisi bırakmış (Instagram)
-     * ya da hemen ardından kısa bir gülme cevabı yazmış.
+     * Seçilen adlar dışındaki herkesin mesajlarını telefondan siler (sadece sizinkiler kalır).
+     * @return silinen mesaj sayısı
      */
-    private fun funnyForMe(all: List<ChatLine>, names: Set<String>): List<String> {
-        val out = LinkedHashSet<String>()
-        all.forEachIndexed { i, l ->
-            if (l.sender in names || l.shared) return@forEachIndexed
-            val reacted = l.laughBy.split(',').any { it.trim() in names }
-            val next = all.getOrNull(i + 1)
-            val laughedAfter = next != null && next.sender in names && next.text.length <= 40 && LAUGH_REPLY.containsMatchIn(next.text)
-            if ((reacted || laughedAfter) && l.text.length in 8..400) out += l.text.replace("\n", " ")
-        }
-        return out.toList()
+    suspend fun pruneOthers(ctx: Context, me: String): Int = withContext(Dispatchers.IO) {
+        val names = ownerNames(me)
+        if (names.isEmpty()) return@withContext 0
+        val all = load(ctx)
+        val mine = all.filter { it.sender in names }
+        save(ctx, mine)
+        all.size - mine.size
     }
 
     fun clear(ctx: Context) {
         file(ctx).delete()
         followingFile(ctx).delete()
     }
+
+    private fun ownerNames(me: String) = me.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
 
     // ------------------------------------------------------------------
     // Takip edilen hesaplar (Instagram)
@@ -287,83 +282,106 @@ object StyleLearner {
         load(ctx).groupingBy { it.sender }.eachCount().toList().sortedByDescending { it.second }
 
     /**
-     * Kullanıcının mesajlarından konuşma tarzı rehberi çıkarır ve ayarlara kaydeder.
-     * Sadece kullanıcının kendi mesajları yapay zekaya gönderilir.
+     * Bütçeyi gruplar arasında adil böler: önce herkese eşit pay, payını dolduramayanın
+     * artanı diğerlerine dağıtılır.
      */
+    private fun fairShares(sizes: Map<String, Int>, total: Int): Map<String, Int> {
+        val out = mutableMapOf<String, Int>()
+        var left = total
+        var open = sizes.toList().sortedBy { it.second }
+        while (open.isNotEmpty()) {
+            val share = left / open.size
+            val (name, size) = open.first()
+            if (size <= share) {
+                out[name] = size
+                left -= size
+                open = open.drop(1)
+            } else {
+                open.forEach { out[it.first] = share }
+                break
+            }
+        }
+        return out
+    }
+
+    /** Bir listeden, toplam karakteri bütçeyi aşmayacak şekilde baştan sona eşit aralıklı örnek alır. */
+    private fun spread(msgs: List<String>, budget: Int): List<String> {
+        val totalLen = msgs.sumOf { it.length + 3 }
+        if (totalLen <= budget) return msgs
+        val step = totalLen.toDouble() / budget
+        val out = mutableListOf<String>()
+        var acc = 0.0
+        var next = 0.0
+        var chars = 0
+        for (m in msgs) {
+            if (acc >= next && chars + m.length + 3 <= budget) {
+                out += m
+                chars += m.length + 3
+                next += (m.length + 3) * step
+            }
+            acc += m.length + 3
+        }
+        return out
+    }
+
     /**
-     * @param me kullanıcının sohbetlerdeki adları (WhatsApp ve Instagram'da farklı olabilir), virgülle ayrılmış
+     * Kullanıcının kendi mesajlarından konuşma tarzı rehberi çıkarır ve ayarlara kaydeder.
+     * Sadece kullanıcının kendi mesajları yapay zekaya gönderilir.
+     * @param me kullanıcının sohbetlerdeki adları (WhatsApp ve her Instagram hesabında farklı olabilir), virgülle ayrılmış
      */
     suspend fun analyze(ctx: Context, me: String): String {
-        val names = me.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
-        val mineLines = load(ctx).filter { it.sender in names && !it.shared }
+        val names = ownerNames(me)
+        val all = withContext(Dispatchers.IO) { load(ctx) }
+        val mineLines = all.filter { it.sender in names && !it.shared }
         if (mineLines.size < 20) return "Analiz için en az 20 mesajınız olmalı (şu an ${mineLines.size})."
-        // Her ad (WhatsApp adı, Instagram adı...) için eşit pay ayır ve her birinin tamamından eşit aralıklı örnek al;
-        // böylece bir platformun mesajları diğerini bastırmaz, ikisi harmanlanır.
-        val groups = mineLines.groupBy { it.sender }.mapValues { (_, v) -> v.map { it.text.replace("\n", " ") } }
-        val perGroup = 12000 / groups.size
-        val used = mutableMapOf<String, Int>()
+        // Her ad (WhatsApp adı, 1. ve 2. Instagram adı...) için adil pay ayır ve her birinin tamamından
+        // eşit aralıklı örnek al; böylece hiçbir hesap diğerlerini bastırmaz, hepsi harmanlanır.
+        val groups = mineLines.groupBy { it.sender }.mapValues { (_, v) ->
+            v.map { it.text.replace("\n", " ").trim().take(MAX_MSG) }.filter { it.isNotEmpty() }
+        }
+        val shares = fairShares(groups.mapValues { (_, v) -> v.sumOf { it.length + 3 } }, TOTAL_CHARS)
         val picked = mutableListOf<String>()
+        val used = mutableMapOf<String, Int>()
         for ((name, msgs) in groups) {
-            val budgetCount = minOf(msgs.size, maxOf(20, perGroup / 40))
-            val step = msgs.size.toDouble() / budgetCount
-            var chars = 0
-            var count = 0
-            var i = 0.0
-            while (i < msgs.size && chars < perGroup) {
-                val m = msgs[i.toInt()].take(300)
-                picked += m
-                chars += m.length + 3
-                count++
-                i += step
-            }
-            used[name] = count
+            val p = spread(msgs, shares[name] ?: 0)
+            picked += p
+            used[name] = p.size
         }
         val sample = StringBuilder()
         picked.shuffled().forEach { sample.append("- ").append(it).append('\n') }
-        lastUsage = used.entries.joinToString(", ") { "${it.key}: ${it.value} mesaj" }
-        // Güldüğü espriler ve paylaştığı içerikler (mizah tarzı için).
-        val all = load(ctx)
-        val funny = funnyForMe(all, names).shuffled().fold(StringBuilder()) { b, t ->
-            if (b.length + t.length < 3500) b.append("- ").append(t.take(300)).append('\n')
-            b
-        }
-        val shares = all.filter { it.shared && it.sender in names }.map { it.text.replace("\n", " ") }.distinct()
+        lastUsage = used.entries.joinToString(", ") { "${it.key}: ${it.value}/${groups[it.key]?.size ?: 0} mesaj" }
+        // Kendi paylaştığı içerikler ve takip ettiği hesaplar (mizah ve ilgi alanları için).
+        val sharedText = all.filter { it.shared && it.sender in names }.map { it.text.replace("\n", " ") }.distinct()
             .shuffled().fold(StringBuilder()) { b, t ->
-                if (b.length + t.length < 2500) b.append("- ").append(t.take(250)).append('\n')
+                if (b.length + t.length < 8000) b.append("- ").append(t.take(300)).append('\n')
                 b
             }
-        val following = loadFollowing(ctx).shuffled().take(600).joinToString(", ").take(6000)
-        val humor = buildString {
-            if (funny.isNotEmpty()) append("\n\nKişinin GÜLDÜĞÜ mesajlar (başkalarının yazdığı espriler):\n").append(funny)
-            if (shares.isNotEmpty()) append("\n\nKişinin arkadaşlarına PAYLAŞTIĞI içeriklerin açıklamaları:\n").append(shares)
+        val following = loadFollowing(ctx).shuffled().take(1500).joinToString(", ").take(15000)
+        val extra = buildString {
+            if (sharedText.isNotEmpty()) append("\n\nKişinin arkadaşlarına PAYLAŞTIĞI içeriklerin açıklamaları:\n").append(sharedText)
             if (following.isNotEmpty()) append("\n\nKişinin Instagram'da TAKİP ETTİĞİ hesaplar (kullanıcı adları):\n").append(following)
         }
         val system = "Sen bir dil ve üslup analistisin. Türkçe yaz."
-        val prompt = """
-Aşağıda AYNI kişinin WhatsApp ve Instagram'da (farklı platformlarda) yazdığı mesajlardan karışık örnekler var; ikisini harmanlayıp tek bir tarz çıkar. Bu kişinin konuşma tarzını analiz et ve
-bir sesli asistanın onunla AYNI TARZDA konuşabilmesi için kısa bir "konuşma tarzı rehberi" yaz.
-
-Şunlara bak: hitap şekilleri, sık kullandığı kelime ve kalıplar, argo/kısaltmalar, cümle uzunluğu, resmiyet düzeyi,
-espri ve tepki biçimi (ör. "aynen", "hahaha", "kanka"), soru sorma şekli, enerji/ton.
-
-Kurallar:
-- 8-12 kısa madde yaz, her madde tek cümle. Somut örnek kelimeler ver.
-- Yazım hatalarını ya da Türkçe karakter kullanmamasını kural olarak YAZMA (asistan sesli konuşacak, düzgün Türkçe yazmalı).
-- Kişisel bilgi (isim, adres, numara) yazma, sadece üslup.
-- Madde işareti olarak "-" kullan, başka açıklama ekleme.
-
-Mesajlar:
-$sample
-$humor
-
-Güldüğü mesajlar ya da paylaştığı içerikler verildiyse, sonuna "Mizah tarzı:" başlıklı 4-6 madde daha ekle:
-ne tür esprilere güldüğünü (absürt, kara mizah, laf sokma, futbol, kelime oyunu vb.), sevdiği konuları ve asistanın
-ona nasıl espri yapması gerektiğini yaz. Espriyi aynen kopyalama, türünü anlat.
-
-Takip ettiği hesaplar verildiyse, en sona "İlgi alanları:" başlıklı 3-6 madde ekle: tuttuğu takım, sevdiği müzik/sanatçılar,
-hobiler, takip ettiği mizah sayfaları gibi. Sadece ünlü/sayfa/marka hesaplarından çıkarım yap; kişisel arkadaş hesaplarını
-ve kullanıcı adlarını yazma. Asistan bu konuları sohbette ve esprilerde kullanabilsin.
-""".trim()
+        val prompt = buildString {
+            append("Aşağıda AYNI kişinin ${groups.size} farklı hesabından (WhatsApp ve Instagram hesapları) yazdığı mesajlardan karışık örnekler var. ")
+            append("Hepsi bu kişinin KENDİ mesajları. Hesapları harmanlayıp tek bir konuşma tarzı çıkar ve bir sesli asistanın onunla ")
+            append("AYNI TARZDA konuşabilmesi için bir \"konuşma tarzı rehberi\" yaz.\n\n")
+            append("Şunlara bak: hitap şekilleri, sık kullandığı kelime ve kalıplar, argo/kısaltmalar, cümle uzunluğu, resmiyet düzeyi, ")
+            append("espri ve tepki biçimi (ör. \"aynen\", \"hahaha\", \"kanka\"), soru sorma şekli, enerji/ton, ruh haline göre değişen tavırları.\n\n")
+            append("Kurallar:\n")
+            append("- 12-20 kısa madde yaz, her madde tek cümle. Somut örnek kelimeler ver.\n")
+            append("- Yazım hatalarını ya da Türkçe karakter kullanmamasını kural olarak YAZMA (asistan sesli konuşacak, düzgün Türkçe yazmalı).\n")
+            append("- Kişisel bilgi (isim, adres, numara) yazma, sadece üslup.\n")
+            append("- Madde işareti olarak \"-\" kullan, başka açıklama ekleme.\n\n")
+            append("Mesajlar:\n").append(sample).append(extra).append("\n\n")
+            append("Sonra \"Mizah tarzı:\" başlıklı 4-6 madde ekle: kişinin KENDİ mesajlarındaki esprilerden")
+            if (sharedText.isNotEmpty()) append(" ve paylaştığı içeriklerden")
+            append(" ne tür mizahı sevdiğini (absürt, kara mizah, laf sokma, futbol, kelime oyunu vb.) ve asistanın ona nasıl ")
+            append("espri yapması gerektiğini yaz. Espriyi aynen kopyalama, türünü anlat.\n")
+            append("En sona \"İlgi alanları:\" başlıklı 3-6 madde ekle: tuttuğu takım, sevdiği müzik/sanatçılar, hobiler, sık konuştuğu konular.")
+            if (following.isNotEmpty()) append(" Takip ettiği hesaplardan sadece ünlü/sayfa/marka olanlardan çıkarım yap; kişisel arkadaş hesaplarını ve kullanıcı adlarını yazma.")
+            append(" Asistan bu konuları sohbette ve esprilerde kullanabilsin.")
+        }
         val guide = JarvisApp.instance.assistant.agent.oneShot(system, prompt).trim()
         if (guide.isBlank()) return "Analiz yapılamadı, tekrar deneyin."
         JarvisApp.instance.settings.styleGuide = guide

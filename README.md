@@ -140,14 +140,14 @@ Nano küçük bir modeldir; cevapları daha basittir ve internette arama yapamaz
 ### Konuşma tarzım
 WhatsApp'ta sohbet > ⋮ > Diğer > **Sohbeti dışa aktar** > **Medya olmadan** > paylaş menüsünden **Jarvis**
 (ya da Ayarlar > Konuşma tarzım > Sohbet yükle). Instagram için: Ayarlar > Hesap Merkezi > Bilgilerin ve izinlerin >
-**Bilgilerini indir** > Cihaza indir > sadece **Mesajlar**, biçim **JSON** (HTML de olur) > gelen ZIP'i Jarvis'e yükle. Birkaç sohbet yükle, "Hangisi sizsiniz?" altından kendi adını seç,
-**Tarzımı analiz et** de. Mizah tarzı için ayrıca **güldüğün espriler** (Instagram'da 😂/🤣/💀 tepkisi bıraktıkların ya da
-hemen ardından "hahaha", "jsjs", "koptum" gibi cevap verdiklerin; isimsiz, en fazla ~3500 karakter) ve arkadaşlarına
-paylaştığın reels açıklamaları kullanılır (Instagram beğenileri dosyasında içerik olmadığı için kullanılmaz).
-Dışa aktarmada "Takipçiler ve takip edilenler" de seçilirse **takip ettiğin hesaplardan** "İlgi alanları" çıkarılır
-(takım, müzik, hobiler, mizah sayfaları; arkadaş hesapları yok sayılır).
-Bunların dışında yapay zekaya **sadece senin mesajların** gönderilir; çıkan rehber Ayarlar'da düzenlenebilir
-ve Jarvis seninle o tarzda konuşur. Yüklenen sohbetler sadece telefonda saklanır, istendiğinde silinir.
+**Bilgilerini indir** > Cihaza indir > sadece **Mesajlar**, biçim **JSON** (HTML de olur) > gelen ZIP'i Jarvis'e yükle.
+Birden fazla hesap yükleyebilirsin (ör. 1 WhatsApp + 2 Instagram). "Hangileri sizsiniz?" altından **her hesaptaki kendi adını**
+seç (hepsini) ve **Tarzımı analiz et** de: her hesaptan adil pay alınır (toplam ~200 bin karakter), hepsi tek tarzda harmanlanır.
+Yapay zekaya **sadece senin mesajların**, senin paylaştığın reels açıklamaları ve (dışa aktarmada "Takipçiler ve takip edilenler"
+seçildiyse) takip ettiğin hesaplar gider; arkadaşlarının mesajları gönderilmez. Mizah tarzı senin kendi esprilerinden ve
+paylaşımlarından, "İlgi alanları" takip ettiğin ünlü/sayfa hesaplarından çıkarılır.
+Sohbetler telefonda sıkıştırılmış saklanır (en fazla 150 bin mesaj); **Başkalarının mesajlarını sil** düğmesi sadece seninkileri
+bırakıp yer açar, **Sohbetleri sil** hepsini siler. Çıkan rehber Ayarlar'da düzenlenebilir.
 
 ## 5. Kullanım örnekleri
 
