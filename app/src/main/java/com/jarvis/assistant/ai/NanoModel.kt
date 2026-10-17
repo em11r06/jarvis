@@ -69,6 +69,8 @@ object NanoModel {
     /** Modeli indirir; ilerlemeyi durum metnine yazar. */
     suspend fun download() {
         // Telefon desteklemiyorsa indirme denemek yerine nedenini göster.
+        _status.value = "Kontrol ediliyor..."
+        kotlinx.coroutines.delay(400)
         if (checkStatus() == FeatureStatus.UNAVAILABLE) return
         _status.value = "İndirme başlıyor..."
         model.download()
