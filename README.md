@@ -154,11 +154,13 @@ Kararsız kaldığım yerlerde şunları seçtim:
 - **ses_ayarla "kis":** "Sesi kıs" ile "azalt" ayrı yazıldığı için `kis` = sessize al (0), `azalt` = birkaç kademe düşür.
 - **Onay gerektiren işler:** Sistem promptu onay istemeyi söylüyor. Ayrıca güvenlik için `arama_yap`, `sms_gonder` ve
   `yeniden_baslat` araçları `onaylandi=true` olmadan çalışmıyor.
-- **Gemini düşünme seviyesi:** Sesli asistanda hız önemli olduğu için `thinkingLevel: low`. Model desteklemezse otomatik olarak ayarsız tekrar denenir.
+- **Gemini düşünme seviyesi:** Sesli asistanda hız önemli olduğu için `thinkingLevel: minimal`. Model desteklemezse sırayla `low` ve ayarsız hâli denenir.
 - **Geçmiş özetleme:** 40 adımı geçince eski kısım özetlenir, son 14 adım aynen kalır. Özet sistem promptuna eklenir.
 - **Anahtarların saklanması:** Uygulamaya özel SharedPreferences (başka uygulamalar okuyamaz). EncryptedSharedPreferences kütüphanesi
   Google tarafından kullanımdan kaldırıldığı için kullanılmadı. `allowBackup=false` ile yedeklere de girmez.
-- **ElevenLabs modeli:** `eleven_multilingual_v2` (Türkçe destekli çok dilli model). Hata/internet yoksa seçili Android sesine döner.
+- **ElevenLabs modeli:** Varsayılan `eleven_flash_v2_5` (hızlı, Türkçe destekli). Ses ekranından "Kaliteli" (`eleven_multilingual_v2`) seçilebilir.
+  Cevap cümlelere bölünür; ilk cümle iner inmez çalar, o çalarken sonraki iner. Hata/internet yoksa seçili Android sesine döner.
+- **Doğal ses:** ElevenLabs'e stability 0.4, style 0.2 ve önceki/sonraki cümle bilgisi gönderilir (akıcı tonlama).
 - **Uyandırma motoru:** Picovoice şirket e-postası istediği için varsayılan motor **Vosk** (ücretsiz, çevrimdışı, Apache lisansı).
   Küçük İngilizce model (~40 MB) derleme sırasında indirilip APK'ya konur; tanıyıcı sadece "jarvis" kelimesini arayacak şekilde kısıtlanır.
   Porcupine'den biraz daha fazla pil harcar. Picovoice anahtarı girilirse otomatik olarak Porcupine (hassasiyet 0.65) kullanılır.

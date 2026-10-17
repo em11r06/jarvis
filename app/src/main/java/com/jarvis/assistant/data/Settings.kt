@@ -29,7 +29,7 @@ class Settings(context: Context) {
     var elevenKey by str("eleven_key", "")
     var elevenVoiceId by str("eleven_voice_id", "")
     var elevenVoiceName by str("eleven_voice_name", "")
-    var elevenModel by str("eleven_model", "eleven_multilingual_v2")
+    var elevenModel by str("eleven_model", ELEVEN_FAST)
 
     // Uyandırma
     var picovoiceKey by str("picovoice_key", "")
@@ -69,5 +69,9 @@ class Settings(context: Context) {
         const val PROVIDER_CLAUDE = "claude"
         const val TTS_ANDROID = "android"
         const val TTS_ELEVEN = "eleven"
+        /** Hızlı, düşük gecikmeli, Türkçe destekli model. */
+        const val ELEVEN_FAST = "eleven_flash_v2_5"
+        /** Daha kaliteli ama daha yavaş çok dilli model. */
+        const val ELEVEN_QUALITY = "eleven_multilingual_v2"
     }
 }

@@ -34,17 +34,21 @@ class GeminiProvider(
             }
             body.put("tools", JSONArray().put(JSONObject().put("functionDeclarations", decls)))
         }
-        // Sesli asistan için hız önemli: düşük düşünme seviyesi.
-        body.put("generationConfig", JSONObject().put("thinkingConfig", JSONObject().put("thinkingLevel", "low")))
-
+        // Sesli asistan için hız önemli: en düşük düşünme seviyesi. Model desteklemezse
+        // bir üst seviyeyi, o da olmazsa ayarsız hâli dener.
         val url = "https://generativelanguage.googleapis.com/v1beta/models/${model()}:generateContent"
         val headers = mapOf("x-goog-api-key" to key)
-        var res = Http.postJson(url, body.toString(), headers)
-        if (res.code == 400 && res.body.contains("thinking", ignoreCase = true)) {
-            // Eski modeller thinkingLevel desteklemiyor; ayarsız tekrar dene.
-            body.remove("generationConfig")
+        var res: Http.Result? = null
+        for (level in listOf("minimal", "low", null)) {
+            if (level != null) {
+                body.put("generationConfig", JSONObject().put("thinkingConfig", JSONObject().put("thinkingLevel", level)))
+            } else {
+                body.remove("generationConfig")
+            }
             res = Http.postJson(url, body.toString(), headers)
+            if (!(res.code == 400 && res.body.contains("thinking", ignoreCase = true))) break
         }
+        res!!
         if (res.code !in 200..299) throw AiException("Gemini hatası (${res.code}): ${errorMessage(res.body)}")
 
         val json = JSONObject(res.body)

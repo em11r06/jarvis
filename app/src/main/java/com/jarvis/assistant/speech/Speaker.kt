@@ -12,6 +12,8 @@ import android.util.Log
 import com.jarvis.assistant.ai.Http
 import com.jarvis.assistant.data.Settings
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -89,15 +91,62 @@ class Speaker(private val context: Context, private val settings: Settings) {
         audio.requestAudioFocus(focus)
         try {
             if (settings.ttsMode == Settings.TTS_ELEVEN && settings.elevenKey.isNotBlank() && settings.elevenVoiceId.isNotBlank()) {
-                val ok = runCatching { speakEleven(text, settings.elevenVoiceId) }
-                    .onFailure { Log.w(TAG, "ElevenLabs başarısız, Android sesine dönülüyor", it) }
-                    .getOrDefault(false)
-                if (ok) return
+                val spoken = speakElevenStreamed(text, settings.elevenVoiceId)
+                if (spoken >= 0) {
+                    // Yarıda hata olursa kalan kısmı telefon sesiyle tamamla.
+                    val rest = splitSentences(text).drop(spoken).joinToString(" ")
+                    if (rest.isNotBlank()) speakAndroid(rest, settings.ttsVoice, settings.ttsRate, settings.ttsPitch)
+                    return
+                }
             }
             speakAndroid(text, settings.ttsVoice, settings.ttsRate, settings.ttsPitch)
         } finally {
             audio.abandonAudioFocusRequest(focus)
         }
+    }
+
+    /**
+     * Cevabı cümlelere böler; ilk cümle iner inmez çalar, o çalarken sonrakini indirir.
+     * Böylece uzun cevaplarda beklemeden konuşmaya başlar.
+     * @return başarıyla okunan cümle sayısı; ilk cümle bile alınamadıysa -1
+     */
+    private suspend fun speakElevenStreamed(text: String, voiceId: String): Int = coroutineScope {
+        val parts = splitSentences(text)
+        fun fetch(i: Int) = async(Dispatchers.IO) {
+            runCatching {
+                downloadEleven(
+                    parts[i], voiceId,
+                    previous = parts.getOrNull(i - 1),
+                    next = parts.getOrNull(i + 1),
+                )
+            }
+        }
+        var next = fetch(0)
+        var done = 0
+        for (i in parts.indices) {
+            val file = next.await().onFailure { Log.w(TAG, "ElevenLabs başarısız", it) }.getOrNull()
+                ?: return@coroutineScope if (done == 0) -1 else done
+            if (i + 1 < parts.size) next = fetch(i + 1)
+            try {
+                playFile(file)
+            } finally {
+                file.delete()
+            }
+            done++
+        }
+        done
+    }
+
+    /** Metni cümlelere böler; çok kısa parçaları bir sonrakiyle birleştirir. */
+    private fun splitSentences(text: String): List<String> {
+        val raw = text.trim().split(Regex("(?<=[.!?…])\\s+")).map { it.trim() }.filter { it.isNotEmpty() }
+        val out = mutableListOf<String>()
+        for (r in raw) {
+            val last = out.lastOrNull()
+            // İlk parça kısa olsa da tek başına kalsın ki hemen konuşmaya başlasın.
+            if (last != null && out.size > 1 && last.length < 40) out[out.lastIndex] = "$last $r" else out += r
+        }
+        return out.ifEmpty { listOf(text) }
     }
 
     /**
@@ -179,8 +228,31 @@ class Speaker(private val context: Context, private val settings: Settings) {
     }
 
     /** ElevenLabs'ten mp3 indirir, geçici dosya olarak döndürür. */
-    private suspend fun downloadEleven(text: String, voiceId: String): File = withContext(Dispatchers.IO) {
-        val body = JSONObject().put("text", text).put("model_id", settings.elevenModel.ifBlank { "eleven_multilingual_v2" })
+    private suspend fun downloadEleven(
+        text: String,
+        voiceId: String,
+        previous: String? = null,
+        next: String? = null,
+    ): File = withContext(Dispatchers.IO) {
+        val model = settings.elevenModel.ifBlank { Settings.ELEVEN_FAST }
+        val body = JSONObject()
+            .put("text", text)
+            .put("model_id", model)
+            // Daha canlı, doğal tonlama: düşük kararlılık biraz duygu katar.
+            .put(
+                "voice_settings",
+                JSONObject()
+                    .put("stability", 0.4)
+                    .put("similarity_boost", 0.8)
+                    .put("style", 0.2)
+                    .put("use_speaker_boost", true)
+                    .put("speed", settings.ttsRate.coerceIn(0.7f, 1.2f).toDouble()),
+            )
+        // Önceki/sonraki cümleyi bildirmek, cümleler arası tonlamayı akıcı yapar.
+        previous?.let { body.put("previous_text", it) }
+        next?.let { body.put("next_text", it) }
+        // Dil sabitleme yalnızca v2.5 modellerinde destekleniyor.
+        if (model.endsWith("v2_5")) body.put("language_code", "tr")
         val req = Request.Builder()
             .url("https://api.elevenlabs.io/v1/text-to-speech/$voiceId?output_format=mp3_44100_128")
             .header("xi-api-key", settings.elevenKey)

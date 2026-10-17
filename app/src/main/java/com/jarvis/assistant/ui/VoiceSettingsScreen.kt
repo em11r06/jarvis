@@ -75,6 +75,7 @@ fun VoiceSettingsScreen(onBack: () -> Unit) {
     var elevenId by remember { mutableStateOf(settings.elevenVoiceId) }
     var elevenVoices by remember { mutableStateOf<List<ElevenVoice>>(emptyList()) }
     var elevenStatus by remember { mutableStateOf("") }
+    var elevenModel by remember { mutableStateOf(settings.elevenModel) }
 
     LaunchedEffect(Unit) { voices = VoiceCatalog.androidVoices(context) }
 
@@ -172,8 +173,21 @@ fun VoiceSettingsScreen(onBack: () -> Unit) {
                         }, enabled = elevenKey.isNotBlank() && elevenId.isNotBlank()) { Text("Dinle") }
                     }
                     if (elevenStatus.isNotBlank()) Text(elevenStatus, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    SectionTitle("ElevenLabs modeli")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = elevenModel == Settings.ELEVEN_FAST,
+                            onClick = { elevenModel = Settings.ELEVEN_FAST; settings.elevenModel = elevenModel },
+                            label = { Text("Hızlı (Flash)") },
+                        )
+                        FilterChip(
+                            selected = elevenModel == Settings.ELEVEN_QUALITY,
+                            onClick = { elevenModel = Settings.ELEVEN_QUALITY; settings.elevenModel = elevenModel },
+                            label = { Text("Kaliteli") },
+                        )
+                    }
                     Text(
-                        "Model: ${settings.elevenModel} (Türkçe destekli çok dilli model)",
+                        "Hızlı model neredeyse anında konuşur. Kaliteli model biraz daha doğal ama daha yavaş. İkisi de Türkçe konuşur.",
                         fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
