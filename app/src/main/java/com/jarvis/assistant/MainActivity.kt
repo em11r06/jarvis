@@ -130,7 +130,8 @@ class MainActivity : ComponentActivity() {
                 com.jarvis.assistant.style.StyleLearner.lastFollowingCount = 0
                 val n = com.jarvis.assistant.style.StyleLearner.import(this@MainActivity, docs)
                 val f = com.jarvis.assistant.style.StyleLearner.lastFollowingCount
-                val msg = if (f > 0) "$n mesaj ve $f takip edilen hesap yüklendi. Ayarlar > Konuşma tarzım'dan analiz edin." else if (n == 0) "Yeni mesaj bulunamadı (dosya zaten yüklenmiş olabilir)." else "$n mesaj yüklendi. Ayarlar > Konuşma tarzım'dan analiz edin."
+                val src = com.jarvis.assistant.style.StyleLearner.lastSources.takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty()
+                val msg = (if (f > 0) "$n mesaj ve $f takip edilen hesap yüklendi. Ayarlar > Konuşma tarzım'dan analiz edin." else if (n == 0) "Yeni mesaj bulunamadı (dosya zaten yüklenmiş olabilir)." else "$n mesaj yüklendi. Ayarlar > Konuşma tarzım'dan analiz edin.") + src
                 android.widget.Toast.makeText(this@MainActivity, msg, android.widget.Toast.LENGTH_LONG).show()
             }
         }

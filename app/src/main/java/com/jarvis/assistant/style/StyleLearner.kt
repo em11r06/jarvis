@@ -19,6 +19,8 @@ data class ChatLine(
     val text: String,
     /** Gönderenin paylaştığı bir gönderi/reels açıklaması mı? */
     val shared: Boolean = false,
+    /** Mesajın geldiği hesap/dosya (ör. "WhatsApp", "Instagram (kullanici)"); aynı ad farklı hesaplarda olabilir. */
+    val src: String = "",
 )
 
 /**
@@ -55,25 +57,51 @@ object StyleLearner {
     suspend fun import(ctx: Context, uris: List<Uri>): Int = withContext(Dispatchers.IO) {
         val all = load(ctx).toMutableList()
         // Aynı dosya tekrar yüklenirse mesajlar iki kez sayılmasın.
-        val seen = all.mapTo(HashSet()) { it.sender + "\u0000" + it.text }
+        val index = HashMap<String, Int>()
+        all.forEachIndexed { i, l -> index[l.sender + "\u0000" + l.text] = i }
         var added = 0
+        var tagged = 0
+        lastSources = ""
         for (uri in uris) {
-            val lines = runCatching { readChats(ctx, uri) }.getOrDefault(emptyList())
-            val fresh = lines.filter { seen.add(it.sender + "\u0000" + it.text) }
-            all += fresh
-            added += fresh.size
+            val (raw, src) = runCatching { readChats(ctx, uri) }.getOrDefault(emptyList<ChatLine>() to "")
+            val lines = raw.map { it.copy(src = src) }
+            if (lines.isNotEmpty()) lastSources = listOf(lastSources, src).filter { it.isNotBlank() }.joinToString(", ")
+            for (l in lines) {
+                val key = l.sender + "\u0000" + l.text
+                val old = index[key]
+                if (old == null) {
+                    index[key] = all.size
+                    all += l
+                    added++
+                } else if (all[old].src.isBlank() && l.src.isNotBlank()) {
+                    // Eski sürümde yüklenen mesaj: hangi hesaptan geldiğini şimdi öğreniyoruz.
+                    all[old] = all[old].copy(src = l.src)
+                    tagged++
+                }
+            }
         }
-        save(ctx, all.takeLast(MAX_LINES))
+        if (added > 0 || tagged > 0) save(ctx, all.takeLast(MAX_LINES))
+        lastTagged = tagged
         added
     }
 
-    private fun readChats(ctx: Context, uri: Uri): List<ChatLine> {
+    /** Son içe aktarmada hesabı belirlenen (önceden yüklenmiş) mesaj sayısı. */
+    @Volatile
+    var lastTagged = 0
+
+    /** Son içe aktarılan dosyaların kaynak adları (ekranda göstermek için). */
+    @Volatile
+    var lastSources = ""
+
+    /** Dosyadaki mesajlar ve kaynağın adı (WhatsApp ya da hangi Instagram hesabı). */
+    private fun readChats(ctx: Context, uri: Uri): Pair<List<ChatLine>, String> {
         val name = ctx.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
             if (c.moveToFirst()) c.getString(0) else null
         }.orEmpty()
         val type = ctx.contentResolver.getType(uri).orEmpty()
-        val input = ctx.contentResolver.openInputStream(uri) ?: return emptyList()
-        return input.use { ins ->
+        val input = ctx.contentResolver.openInputStream(uri) ?: return emptyList<ChatLine>() to ""
+        var igSeen = false
+        val lines = input.use { ins ->
             if (name.endsWith(".zip", true) || type.contains("zip")) {
                 val out = mutableListOf<ChatLine>()
                 val zip = ZipInputStream(ins.buffered())
@@ -88,6 +116,7 @@ object StyleLearner {
                         val names = if (n.endsWith(".json")) parseFollowingJson(txt) else parseFollowingHtml(txt)
                         lastFollowingCount += addFollowing(ctx, names)
                     }
+                    if (isIg) igSeen = true
                     if (!entry.isDirectory && (isWa || isIg)) {
                         val bytes = readLimited(zip, 8_000_000)
                         out += parseByName(n, bytes.toString(Charsets.UTF_8))
@@ -96,9 +125,22 @@ object StyleLearner {
                 }
                 out
             } else {
-                parseByName(name.lowercase(), ins.readBytes().toString(Charsets.UTF_8))
+                val n = name.lowercase()
+                if (n.endsWith(".json") || n.endsWith(".html") || n.endsWith(".htm")) igSeen = true
+                parseByName(n, ins.readBytes().toString(Charsets.UTF_8))
             }
         }
+        return lines to sourceName(name, igSeen)
+    }
+
+    /**
+     * Instagram dışa aktarma dosyası genelde "instagram-KULLANICIADI-2026-10-17-xxxx.zip" adını taşır;
+     * oradan hesap adı alınır ki iki Instagram hesabı ayrı ayrı sayılsın.
+     */
+    private fun sourceName(fileName: String, instagram: Boolean): String {
+        if (!instagram) return "WhatsApp"
+        val user = Regex("(?i)instagram[-_](.+?)[-_]\\d{4}[-_]\\d{2}").find(fileName)?.groupValues?.get(1)
+        return "Instagram (" + (user ?: fileName.substringBeforeLast('.').take(30).ifBlank { "?" }) + ")"
     }
 
     private fun readLimited(zip: ZipInputStream, max: Int): ByteArray {
@@ -192,7 +234,7 @@ object StyleLearner {
         val text = if (gz) GZIPInputStream(bytes.inputStream()).use { it.readBytes() }.toString(Charsets.UTF_8) else bytes.toString(Charsets.UTF_8)
         val arr = JSONArray(text)
         (0 until arr.length()).map {
-            arr.getJSONObject(it).let { o -> ChatLine(o.getString("s"), o.getString("t"), o.optBoolean("h", false)) }
+            arr.getJSONObject(it).let { o -> ChatLine(o.getString("s"), o.getString("t"), o.optBoolean("h", false), o.optString("o")) }
         }
     }.getOrDefault(emptyList())
 
@@ -201,6 +243,7 @@ object StyleLearner {
         lines.forEach {
             val o = JSONObject().put("s", it.sender).put("t", it.text.take(2000))
             if (it.shared) o.put("h", true)
+            if (it.src.isNotBlank()) o.put("o", it.src)
             arr.put(o)
         }
         val tmp = File(ctx.filesDir, "style_chats.tmp")
@@ -336,7 +379,8 @@ object StyleLearner {
         if (mineLines.size < 20) return "Analiz için en az 20 mesajınız olmalı (şu an ${mineLines.size})."
         // Her ad (WhatsApp adı, 1. ve 2. Instagram adı...) için adil pay ayır ve her birinin tamamından
         // eşit aralıklı örnek al; böylece hiçbir hesap diğerlerini bastırmaz, hepsi harmanlanır.
-        val groups = mineLines.groupBy { it.sender }.mapValues { (_, v) ->
+        // Gruplar ad + hesap: iki Instagram hesabında adınız aynı olsa bile her hesap ayrı pay alır.
+        val groups = mineLines.groupBy { if (it.src.isBlank()) it.sender else "${it.sender} · ${it.src}" }.mapValues { (_, v) ->
             v.map { it.text.replace("\n", " ").trim().take(MAX_MSG) }.filter { it.isNotEmpty() }
         }
         val shares = fairShares(groups.mapValues { (_, v) -> v.sumOf { it.length + 3 } }, TOTAL_CHARS)

@@ -94,7 +94,14 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
             senders = StyleLearner.senders(context)
             styleKb = StyleLearner.storageKb(context)
             if (styleOwner.isBlank()) styleOwner = senders.firstOrNull()?.first.orEmpty()
-            styleStatus = if (f > 0) "$n mesaj ve $f takip edilen hesap yüklendi." else if (n == 0) "Yeni mesaj bulunamadı. Dosya zaten yüklenmiş olabilir; değilse WhatsApp dışa aktarma (.txt/.zip) ya da Instagram bilgi indirme ZIP'i olmalı." else "$n mesaj yüklendi."
+            val t = StyleLearner.lastTagged
+            val src = StyleLearner.lastSources.takeIf { it.isNotBlank() }?.let { " Kaynak: $it." }.orEmpty()
+            styleStatus = when {
+                f > 0 -> "$n mesaj ve $f takip edilen hesap yüklendi.$src"
+                n == 0 && t > 0 -> "Bu dosya zaten yüklüydü; $t mesajın hangi hesaptan geldiği kaydedildi.$src"
+                n == 0 -> "Yeni mesaj bulunamadı. Dosya zaten yüklenmiş olabilir; değilse WhatsApp dışa aktarma (.txt/.zip) ya da Instagram bilgi indirme ZIP'i olmalı."
+                else -> "$n mesaj yüklendi.$src"
+            }
         }
     }
     // Uyanma sesi dosyası uygulamanın içine kopyalanır (asıl dosya silinse de çalışsın); en fazla 3 MB.
