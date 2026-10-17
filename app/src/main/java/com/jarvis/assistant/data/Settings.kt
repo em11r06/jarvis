@@ -44,8 +44,18 @@ class Settings(context: Context) {
     var followUpSeconds by int("follow_up_seconds", 6)
     /** Uyanınca bip yerine "Buyrun efendim" gibi sesli cevap ver. */
     var wakeGreeting by bool("wake_greeting", true)
+    /** Uyanınca ne yapsın: WAKE_SPEAK (söz), WAKE_BEEP, WAKE_FILE (seçilen ses dosyası), WAKE_SILENT. */
+    var wakeSound: String
+        get() = prefs.getString("wake_sound", null) ?: if (wakeGreeting) WAKE_SPEAK else WAKE_BEEP
+        set(value) = prefs.edit().putString("wake_sound", value).apply()
+    /** Uyanınca söylenecek sözler, her satır bir seçenek; her seferinde rastgele biri. */
+    var wakePhrases by str("wake_phrases", "Buyrun efendim.\nEfendim?\nDinliyorum.\nBuyrun.\nEmrinizdeyim.")
+    /** Uyanma sesi dosyasının ses düzeyi (0-1). */
+    var wakeVolume by float("wake_volume", 0.8f)
     /** Kullanıcının ses izi (virgülle ayrılmış sayılar); boşsa herkese tepki verir. */
     var voicePrint by str("voice_print", "")
+    /** Ses tanıtırken alınan ve sonradan öğrenilen ses örnekleri (";" ile ayrılmış). */
+    var voiceSamples by str("voice_samples", "")
     /** Ses izi benzerlik eşiği; büyüdükçe daha seçici. */
     var voiceThreshold by float("voice_threshold", 0.5f)
 
@@ -87,6 +97,10 @@ class Settings(context: Context) {
     }
 
     companion object {
+        const val WAKE_SPEAK = "speak"
+        const val WAKE_BEEP = "beep"
+        const val WAKE_FILE = "file"
+        const val WAKE_SILENT = "silent"
         const val PROVIDER_GEMINI = "gemini"
         const val PROVIDER_CLAUDE = "claude"
         const val TTS_ANDROID = "android"

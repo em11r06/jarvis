@@ -149,6 +149,19 @@ paylaşımlarından, "İlgi alanları" takip ettiğin ünlü/sayfa hesaplarında
 Sohbetler telefonda sıkıştırılmış saklanır (en fazla 150 bin mesaj); **Başkalarının mesajlarını sil** düğmesi sadece seninkileri
 bırakıp yer açar, **Sohbetleri sil** hepsini siler. Çıkan rehber Ayarlar'da düzenlenebilir.
 
+### Görseller ve ekran hareketleri
+- Sohbette yazı kutusunun solundaki **görsel** düğmesiyle (ya da galeriden **Paylaş > Jarvis**) en fazla 4 görsel ekleyip soru sor.
+  Görseller küçültülüp telefonda saklanır (son 40 tane), yapay zekaya sadece son 3 görsel gider.
+- Jarvis ekrana kendisi de bakabilir (`ekrana_bak`). Bu özellik için güncellemeden sonra **Erişilebilirlik > Jarvis**'i bir kez kapatıp açman gerekebilir.
+- **Basılı tutma** (`basili_tut`) ve **sürükleme** (`surukle`): süreyi söylemezsen telefonun "dokunma ve basılı tutma gecikmesi"
+  ayarına ve mesafeye göre kendisi ayarlar. Dokunuştan sonra ekran değişmezse biraz daha uzun bir kez daha dokunur.
+
+### Uyanma sesi ve ses tanıma
+Ayarlar > Uyandırma > **Uyanınca**: söz (söyleyeceği cümleleri sen yazarsın, her satıra bir tane), bip, **kendi sesin**
+(bir mp3/ogg/wav seç, ilk 5 saniyesi çalar) ya da sessiz. **Dene** ile dinleyebilirsin.
+Ses tanıma artık 8 örnek alıyor ve eşiği daha doğru hesaplıyor. Seni ilk seferde tanımazsa hemen bir daha "Jarvis" de:
+kabul eder ve o sesi öğrenir, zamanla daha iyi tanır. Eski sürümde ses kaydettiysen bir kez **Yeniden kaydet** yap.
+
 ## 5. Kullanım örnekleri
 
 - "Jarvis... nasılsın?" (sohbet)

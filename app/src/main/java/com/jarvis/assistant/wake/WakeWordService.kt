@@ -119,18 +119,7 @@ class WakeWordService : Service() {
         val speaker = JarvisApp.instance.assistant.speaker
         // Müziği/videoyu hemen kıs; oturum bitene kadar kısık kalsın.
         speaker.acquireFocus()
-        if (JarvisApp.instance.settings.wakeGreeting) {
-            // "Buyrun efendim" gibi kısa bir cevapla duyduğunu belli et.
-            JarvisApp.instance.assistant.speaker.speakShort(WAKE_REPLIES.random())
-        } else {
-            // Kısa bir "bip" ile duyduğunu belli et.
-            runCatching {
-                val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 70)
-                tone.startTone(ToneGenerator.TONE_PROP_BEEP, 120)
-                kotlinx.coroutines.delay(150)
-                tone.release()
-            }
-        }
+        playWakeSound(applicationContext)
         try {
             JarvisApp.instance.assistant.voiceSession()
         } finally {
@@ -196,8 +185,35 @@ class WakeWordService : Service() {
         const val ACTION_STOP = "com.jarvis.assistant.STOP_WAKE"
         const val EXTRA_START_WAKE = "start_wake"
 
-        /** Uyanınca söylenen kısa cevaplar; her seferinde rastgele biri seçilir. */
-        val WAKE_REPLIES = listOf("Buyrun efendim.", "Efendim?", "Dinliyorum.", "Buyrun.", "Emrinizdeyim.")
+        /** Kullanıcının seçtiği uyanma sesi dosyası. */
+        fun wakeFile(ctx: Context) = java.io.File(ctx.filesDir, "wake_sound")
+
+        /** Ayarlara göre uyanma sesini çalar: söz, bip, kendi ses dosyası ya da sessiz. Ayarlardaki "Dene" de bunu kullanır. */
+        suspend fun playWakeSound(ctx: Context) {
+            val st = JarvisApp.instance.settings
+            val speaker = JarvisApp.instance.assistant.speaker
+            when (st.wakeSound) {
+                com.jarvis.assistant.data.Settings.WAKE_SILENT -> Unit
+                com.jarvis.assistant.data.Settings.WAKE_FILE -> {
+                    val f = wakeFile(ctx)
+                    if (f.exists()) speaker.playWakeFile(f, st.wakeVolume) else beep(st.wakeVolume)
+                }
+                com.jarvis.assistant.data.Settings.WAKE_BEEP -> beep(st.wakeVolume)
+                else -> {
+                    val phrase = st.wakePhrases.lines().map { it.trim() }.filter { it.isNotEmpty() }.randomOrNull() ?: "Buyrun efendim."
+                    speaker.speakShort(phrase)
+                }
+            }
+        }
+
+        private suspend fun beep(volume: Float) {
+            runCatching {
+                val tone = ToneGenerator(AudioManager.STREAM_MUSIC, (volume * 100).toInt().coerceIn(10, 100))
+                tone.startTone(ToneGenerator.TONE_PROP_BEEP, 120)
+                kotlinx.coroutines.delay(150)
+                tone.release()
+            }
+        }
 
         /** Servis çalışıyor mu? Ayarlar ekranı bunu gösterir. */
         val running = MutableStateFlow(false)

@@ -85,11 +85,15 @@ class MainActivity : ComponentActivity() {
                         val bubbles by assistant.bubbles.collectAsStateWithLifecycle()
                         val state by assistant.state.collectAsStateWithLifecycle()
                         val partial by assistant.partial.collectAsStateWithLifecycle()
+                        val pending by assistant.pendingImages.collectAsStateWithLifecycle()
                         ChatScreen(
                             bubbles = bubbles,
                             state = state,
                             partial = partial,
-                            onSend = assistant::sendText,
+                            onSend = assistant::sendWithPending,
+                            pendingImages = pending,
+                            onAttach = assistant::attachImages,
+                            onRemoveImage = assistant::removePendingImage,
                             onMic = ::onMic,
                             onSettings = { screen = SCREEN_SETTINGS },
                         )
@@ -114,9 +118,17 @@ class MainActivity : ComponentActivity() {
             } else {
                 listOfNotNull(intent.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM))
             }
-            if (uris.isNotEmpty()) lifecycleScope.launch {
+            // Görseller sohbete eklenir (Jarvis'e sorulmak üzere); diğer dosyalar konuşma tarzı için.
+            val isImage = { u: android.net.Uri -> (contentResolver.getType(u) ?: intent.type.orEmpty()).startsWith("image/") }
+            val images = uris.filter(isImage)
+            if (images.isNotEmpty()) {
+                assistant.attachImages(images)
+                android.widget.Toast.makeText(this, "Görsel eklendi. Sorunuzu yazın ya da gönderin.", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            val docs = uris.filterNot(isImage)
+            if (docs.isNotEmpty()) lifecycleScope.launch {
                 com.jarvis.assistant.style.StyleLearner.lastFollowingCount = 0
-                val n = com.jarvis.assistant.style.StyleLearner.import(this@MainActivity, uris)
+                val n = com.jarvis.assistant.style.StyleLearner.import(this@MainActivity, docs)
                 val f = com.jarvis.assistant.style.StyleLearner.lastFollowingCount
                 val msg = if (f > 0) "$n mesaj ve $f takip edilen hesap yüklendi. Ayarlar > Konuşma tarzım'dan analiz edin." else if (n == 0) "Yeni mesaj bulunamadı (dosya zaten yüklenmiş olabilir)." else "$n mesaj yüklendi. Ayarlar > Konuşma tarzım'dan analiz edin."
                 android.widget.Toast.makeText(this@MainActivity, msg, android.widget.Toast.LENGTH_LONG).show()

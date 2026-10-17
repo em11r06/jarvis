@@ -1,6 +1,15 @@
 package com.jarvis.assistant.ui
 
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -51,8 +60,14 @@ fun ChatScreen(
     onSend: (String) -> Unit,
     onMic: () -> Unit,
     onSettings: () -> Unit,
+    pendingImages: List<String> = emptyList(),
+    onAttach: (List<android.net.Uri>) -> Unit = {},
+    onRemoveImage: (String) -> Unit = {},
 ) {
     var input by remember { mutableStateOf("") }
+    val pickImages = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.PickMultipleVisualMedia(4),
+    ) { uris -> if (uris.isNotEmpty()) onAttach(uris) }
     val listState = rememberLazyListState()
     LaunchedEffect(bubbles.size) {
         if (bubbles.isNotEmpty()) listState.animateScrollToItem(bubbles.size - 1)
@@ -116,15 +131,38 @@ fun ChatScreen(
             items(bubbles) { BubbleView(it) }
         }
 
+        if (pendingImages.isNotEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(top = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                pendingImages.forEach { path ->
+                    Box {
+                        Thumb(path, 64.dp)
+                        Icon(
+                            Icons.Default.Close, contentDescription = "Kaldır", tint = JarvisCyan,
+                            modifier = Modifier.align(Alignment.TopEnd).size(20.dp)
+                                .background(MaterialTheme.colorScheme.background, RoundedCornerShape(10.dp))
+                                .clickable { onRemoveImage(path) },
+                        )
+                    }
+                }
+            }
+        }
         Row(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            IconButton(onClick = {
+                pickImages.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            }) {
+                Icon(Icons.Default.AddPhotoAlternate, contentDescription = "Görsel ekle", tint = JarvisCyan)
+            }
             OutlinedTextField(
                 value = input,
                 onValueChange = { input = it },
                 modifier = Modifier.weight(1f),
-                placeholder = { Text("Jarvis'e yaz...") },
+                placeholder = { Text(if (pendingImages.isEmpty()) "Jarvis'e yaz..." else "Görsel hakkında sor...") },
                 maxLines = 4,
                 shape = RoundedCornerShape(20.dp),
             )
@@ -138,9 +176,30 @@ fun ChatScreen(
     }
 }
 
+/** Görselin küçük önizlemesi (dosya silinmişse boş kutu). */
+@Composable
+private fun Thumb(path: String, size: androidx.compose.ui.unit.Dp) {
+    val bmp = remember(path) { com.jarvis.assistant.ai.Images.thumbnail(path)?.asImageBitmap() }
+    val shape = RoundedCornerShape(10.dp)
+    if (bmp != null) {
+        Image(
+            bmp, contentDescription = "Görsel",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.size(size).clip(shape).border(1.dp, JarvisCyan.copy(alpha = 0.6f), shape),
+        )
+    } else {
+        Box(Modifier.size(size).background(JarvisSurface, shape))
+    }
+}
+
 @Composable
 private fun BubbleView(b: ChatBubble) {
-    Box(Modifier.fillMaxWidth(), contentAlignment = if (b.fromUser) Alignment.CenterEnd else Alignment.CenterStart) {
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = if (b.fromUser) Alignment.End else Alignment.Start) {
+        if (b.images.isNotEmpty()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(bottom = 4.dp)) {
+                b.images.forEach { Thumb(it, 120.dp) }
+            }
+        }
         val shape = RoundedCornerShape(16.dp)
         Text(
             b.text,

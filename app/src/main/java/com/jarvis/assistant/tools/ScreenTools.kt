@@ -36,23 +36,137 @@ class EkraniOkuTool : ScreenTool() {
     override suspend fun run(s: JarvisAccessibilityService, args: JSONObject) = s.readScreen()
 }
 
+/** Hedef seçimi: metin, ekrani_oku numarası ya da ekran yüzdesi (x, y). */
+private fun target(s: JarvisAccessibilityService, args: JSONObject, prefix: String = ""): Pair<Pair<Float, Float>?, String?> {
+    val idxKey = "${prefix}indeks"
+    val txtKey = "${prefix}metin"
+    if (args.has("${prefix}x") && args.has("${prefix}y")) {
+        return s.percentToPx(args.optDouble("${prefix}x"), args.optDouble("${prefix}y")) to null
+    }
+    val node = if (args.has(idxKey) && !args.isNull(idxKey)) {
+        s.nodeAt(args.optInt(idxKey)) ?: return null to "Bu numarada öğe yok, önce ekrani_oku çağır."
+    } else {
+        val t = args.optString(txtKey)
+        if (t.isBlank()) return null to "Hata: metin, indeks ya da x/y gerekli."
+        s.findByText(t) ?: return null to "'$t' ekranda bulunamadı. ekrani_oku ya da ekrana_bak ile bak."
+    }
+    return (s.centerOf(node) ?: return null to "Öğenin ekrandaki yeri bulunamadı.") to null
+}
+
+private fun durationArg(args: JSONObject): Long? =
+    if (args.has("sure_ms") && !args.isNull("sure_ms")) args.optLong("sure_ms").takeIf { it > 0 } else null
+
 class DokunTool : ScreenTool() {
     override val name = "dokun"
-    override val description = "Ekrandaki bir öğeye dokunur. 'metin' (görünen yazı) veya 'indeks' (ekrani_oku listesindeki numara) ver."
+    override val description = "Ekrandaki bir öğeye dokunur. 'metin' (görünen yazı), 'indeks' (ekrani_oku numarası) ya da ekrana_bak görüntüsündeki konum " +
+        "için 'x','y' (ekran yüzdesi 0-100) ver. cift=true çift dokunur. sure_ms verilmezse uygun süreyi kendisi seçer."
     override val parameters = Schema.obj(
         "metin" to Schema.str("Dokunulacak öğenin yazısı"),
         "indeks" to Schema.int("ekrani_oku sonucundaki numara"),
+        "x" to Schema.num("Yatay konum, ekran genişliğinin yüzdesi (0 sol, 100 sağ)"),
+        "y" to Schema.num("Dikey konum, ekran yüksekliğinin yüzdesi (0 üst, 100 alt)"),
+        "cift" to Schema.bool("Çift dokunma (ör. fotoğrafı yakınlaştırma, beğenme)"),
+        "sure_ms" to Schema.int("İsteğe bağlı dokunma süresi (ms); normalde boş bırak"),
     )
 
     override suspend fun run(s: JarvisAccessibilityService, args: JSONObject): String {
-        val node = if (args.has("indeks") && !args.isNull("indeks")) {
-            s.nodeAt(args.optInt("indeks")) ?: return "Bu numarada öğe yok, önce ekrani_oku çağır."
-        } else {
-            val t = args.optString("metin")
-            if (t.isBlank()) return "Hata: metin veya indeks gerekli."
-            s.findByText(t) ?: return "'$t' ekranda bulunamadı. ekrani_oku ile bak ya da kaydir dene."
+        val double = args.optBoolean("cift", false)
+        val dur = durationArg(args)
+        // Metin/indeks verildiyse önce uygulamanın kendi tıklama işlemi denenir (en güvenilir yol).
+        if (!double && dur == null && !args.has("x")) {
+            val node = if (args.has("indeks") && !args.isNull("indeks")) s.nodeAt(args.optInt("indeks"))
+            else args.optString("metin").takeIf { it.isNotBlank() }?.let { s.findByText(it) }
+            if (node != null) return if (s.click(node)) after(s, "Dokunuldu.") else "Dokunulamadı."
         }
-        return if (s.click(node)) after(s, "Dokunuldu.") else "Dokunulamadı."
+        val (pt, err) = target(s, args)
+        if (pt == null) return err ?: "Hedef bulunamadı."
+        val (x, y) = pt
+        val before = s.screenSignature()
+        val ok = if (double) {
+            val first = s.tap(x, y, dur ?: 40)
+            delay(90)
+            first && s.tap(x, y, dur ?: 40)
+        } else {
+            s.tap(x, y, dur ?: JarvisAccessibilityService.TAP_MS)
+        }
+        if (!ok) return "Dokunulamadı."
+        // Ekran hiç değişmediyse dokunuş fazla kısa kalmış olabilir: biraz daha uzun bir kez daha dene.
+        if (!double && dur == null) {
+            delay(600)
+            if (s.screenSignature() == before) {
+                s.tap(x, y, 150)
+                return after(s, "Dokunuldu (ilk dokunuşta ekran değişmediği için biraz daha uzun bir kez daha dokundum).")
+            }
+        }
+        return after(s, "Dokunuldu.")
+    }
+}
+
+class BasiliTutTool : ScreenTool() {
+    override val name = "basili_tut"
+    override val description = "Bir öğeye uzun basar (basılı tutar): menü açma, seçme, silme, taşıma moduna geçme için. " +
+        "Hedef: 'metin', 'indeks' ya da 'x','y' (ekran yüzdesi). sure_ms verilmezse telefonun ayarına göre süreyi kendisi seçer."
+    override val parameters = Schema.obj(
+        "metin" to Schema.str("Basılı tutulacak öğenin yazısı"),
+        "indeks" to Schema.int("ekrani_oku sonucundaki numara"),
+        "x" to Schema.num("Yatay konum, ekran yüzdesi"),
+        "y" to Schema.num("Dikey konum, ekran yüzdesi"),
+        "sure_ms" to Schema.int("İsteğe bağlı basılı tutma süresi (ms), ör. 1500; normalde boş bırak"),
+    )
+
+    override suspend fun run(s: JarvisAccessibilityService, args: JSONObject): String {
+        val dur = durationArg(args)
+        if (!args.has("x")) {
+            val node = if (args.has("indeks") && !args.isNull("indeks")) s.nodeAt(args.optInt("indeks"))
+            else args.optString("metin").takeIf { it.isNotBlank() }?.let { s.findByText(it) }
+            if (node != null) return if (s.longPress(node, dur)) after(s, "Basılı tutuldu.", 700) else "Basılı tutulamadı."
+        }
+        val (pt, err) = target(s, args)
+        if (pt == null) return err ?: "Hedef bulunamadı."
+        val used = dur ?: s.autoLongPressMs()
+        return if (s.longPressAt(pt.first, pt.second, used)) after(s, "Basılı tutuldu ($used ms).", 700) else "Basılı tutulamadı."
+    }
+}
+
+class SurukleTool : ScreenTool() {
+    override val name = "surukle"
+    override val description = "Bir yerden başka bir yere sürükler. Başlangıç: 'metin'/'indeks'/'x','y'; hedef: 'hedef_metin'/'hedef_indeks'/'hedef_x','hedef_y' " +
+        "(x,y ekran yüzdesi). Simge/öğe taşırken tut=true (önce basılı tutar), kaydırıcı çekerken ya da çizerken tut=false. " +
+        "sure_ms verilmezse mesafeye göre hızı kendisi ayarlar."
+    override val parameters = Schema.obj(
+        "metin" to Schema.str("Sürüklenecek öğenin yazısı"),
+        "indeks" to Schema.int("Sürüklenecek öğenin ekrani_oku numarası"),
+        "x" to Schema.num("Başlangıç yatay konum (yüzde)"),
+        "y" to Schema.num("Başlangıç dikey konum (yüzde)"),
+        "hedef_metin" to Schema.str("Bırakılacak yerdeki öğenin yazısı"),
+        "hedef_indeks" to Schema.int("Bırakılacak yerdeki öğenin ekrani_oku numarası"),
+        "hedef_x" to Schema.num("Hedef yatay konum (yüzde)"),
+        "hedef_y" to Schema.num("Hedef dikey konum (yüzde)"),
+        "tut" to Schema.bool("Önce basılı tutup sonra taşı (varsayılan true)"),
+        "sure_ms" to Schema.int("İsteğe bağlı taşıma süresi (ms); normalde boş bırak"),
+    )
+
+    override suspend fun run(s: JarvisAccessibilityService, args: JSONObject): String {
+        val (from, e1) = target(s, args)
+        if (from == null) return e1 ?: "Başlangıç bulunamadı."
+        val (to, e2) = target(s, args, "hedef_")
+        if (to == null) return (e2 ?: "Hedef bulunamadı.").replace("metin, indeks", "hedef_metin, hedef_indeks")
+        val ok = s.drag(from.first, from.second, to.first, to.second, args.optBoolean("tut", true), durationArg(args))
+        return if (ok) after(s, "Sürüklendi.", 800) else "Sürüklenemedi (hareket iptal edildi). tut değerini değiştirip ya da sure_ms ile tekrar dene."
+    }
+}
+
+/** Ekran görüntüsünü yapay zekaya gösterir (görsel olarak inceler). */
+class EkranaBakTool : ScreenTool() {
+    override val name = "ekrana_bak"
+    override val description = "Ekranın görüntüsünü alıp sana görsel olarak gösterir. ekrani_oku'nun göremediği resim, video, oyun, harita, " +
+        "grafik gibi şeyleri anlamak ya da kullanıcı 'ekrana bak' deyince kullan."
+    override val parameters = Schema.empty()
+
+    override suspend fun run(s: JarvisAccessibilityService, args: JSONObject): String {
+        val jpeg = s.screenshotJpeg() ?: return "Ekran görüntüsü alınamadı (Erişilebilirlik'te Jarvis'i kapatıp açmak gerekebilir)."
+        val path = com.jarvis.assistant.ai.Images.save(s, jpeg)
+        return "Ekran görüntüsü ekte. Konum verirken x,y'yi ekranın yüzdesi olarak kullan.[[GORSEL:$path]]"
     }
 }
 

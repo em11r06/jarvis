@@ -68,15 +68,20 @@ object VoiceId {
         return WakeHit(conf, spk)
     }
 
+    /** Son "az farkla" reddedilen denemenin zamanı: kullanıcı hemen tekrar "Jarvis" derse kabul edilir. */
+    @Volatile private var nearMissAt = 0L
+
     /**
      * Uyanmalı mı? Kelime güveni yeterli olmalı; ses kaydı varsa konuşan da kullanıcı olmalı.
-     * Müzik çalarken daha sıkı davranır.
+     * Kayıt yokken müzik çalarken daha sıkı davranır.
+     * Ses az farkla tutmazsa ve kullanıcı birkaç saniye içinde tekrar "Jarvis" derse kabul eder
+     * ve o sesi de öğrenir (sesiniz zamanla daha iyi tanınır).
      */
     fun accept(context: Context, settings: Settings, hit: WakeHit): Boolean {
         val music = context.getSystemService(AudioManager::class.java).isMusicActive
         val print = loadPrint(settings)
         val minConf = when {
-            print != null -> 0.7
+            print != null -> 0.6
             music -> 0.95
             else -> 0.85
         }
@@ -85,11 +90,35 @@ object VoiceId {
             return false
         }
         if (print == null) return true
-        val v = hit.voice ?: return false.also { Log.d(TAG, "Reddedildi: ses izi yok") }
-        val sim = cosine(v, print)
-        val ok = sim >= settings.voiceThreshold
-        Log.d(TAG, "Ses benzerliği $sim (eşik ${settings.voiceThreshold}) -> $ok")
-        return ok
+        val now = System.currentTimeMillis()
+        val v = hit.voice
+        val sim = if (v != null) score(settings, v, print) else -1f
+        val th = settings.voiceThreshold
+        if (sim >= th) {
+            Log.d(TAG, "Ses benzerliği $sim (eşik $th) -> kabul")
+            if (v != null && sim < th + 0.15f) learn(settings, v) // sınırdaki örnekler öğretici
+            nearMissAt = 0
+            return true
+        }
+        val near = v == null || sim >= th - NEAR_MARGIN
+        if (near && now - nearMissAt < RETRY_WINDOW_MS) {
+            Log.d(TAG, "Ses benzerliği $sim: tekrar söylendi -> kabul ve öğren")
+            if (v != null) learn(settings, v)
+            nearMissAt = 0
+            return true
+        }
+        if (near) nearMissAt = now
+        Log.d(TAG, "Ses benzerliği $sim (eşik $th) -> ret${if (near) " (az farkla)" else ""}")
+        return false
+    }
+
+    /** Ortalama ses izine ve kayıtlı örneklere göre benzerlik: hangisi daha yakınsa. */
+    private fun score(settings: Settings, v: FloatArray, mean: FloatArray): Float {
+        val base = cosine(v, mean)
+        val samples = loadSamples(settings)
+        if (samples.isEmpty()) return base
+        val top = samples.map { cosine(v, it) }.sortedDescending().take(2)
+        return maxOf(base, top.average().toFloat())
     }
 
     fun loadPrint(settings: Settings): FloatArray? {
@@ -98,16 +127,45 @@ object VoiceId {
         return runCatching { raw.split(',').map { it.toFloat() }.toFloatArray() }.getOrNull()
     }
 
-    /** Kayıtlı örneklerden ses izi ve eşik hesaplar, ayarlara kaydeder. */
-    fun saveEnrollment(settings: Settings, samples: List<FloatArray>) {
+    private fun loadSamples(settings: Settings): List<FloatArray> = settings.voiceSamples.split(';').filter { it.isNotBlank() }.mapNotNull { r ->
+        runCatching { r.split(',').map { it.toFloat() }.toFloatArray() }.getOrNull()
+    }
+
+    private fun storeSamples(settings: Settings, samples: List<FloatArray>) {
+        settings.voiceSamples = samples.takeLast(MAX_SAMPLES).joinToString(";") { s -> s.joinToString(",") { "%.4f".format(java.util.Locale.US, it) } }
         val dim = samples.first().size
         val mean = FloatArray(dim)
-        samples.forEach { s -> for (i in 0 until dim) mean[i] += s[i] / samples.size }
-        // Kendi örneklerin birbirine ne kadar benzediğine bakarak eşiği kişiye göre ayarla.
-        val sims = samples.map { cosine(it, mean) }
-        val threshold = (sims.min() - 0.12f).coerceIn(0.25f, 0.8f)
+        val list = samples.takeLast(MAX_SAMPLES)
+        list.forEach { s -> for (i in 0 until dim) mean[i] += s[i] / list.size }
         settings.voicePrint = mean.joinToString(",")
-        settings.voiceThreshold = threshold
+    }
+
+    /** Kabul edilen bir sesi örneklere ekler (en eski örnekler zamanla düşer, kayıt örnekleri korunur). */
+    private fun learn(settings: Settings, v: FloatArray) {
+        // Eski sürümde sadece ortalama saklanıyordu: onu ilk örnek say.
+        val samples = loadSamples(settings).ifEmpty { listOfNotNull(loadPrint(settings)) }.toMutableList()
+        if (samples.isEmpty() || samples.first().size != v.size) return
+        samples += v
+        // İlk kayıtlı örnekleri koru, öğrenilenlerden en eskisini at.
+        while (samples.size > MAX_SAMPLES) samples.removeAt(ENROLL_KEEP.coerceAtMost(samples.size - 1))
+        storeSamples(settings, samples)
+    }
+
+    /** Kayıtlı örneklerden ses izi ve eşik hesaplar, ayarlara kaydeder. */
+    fun saveEnrollment(settings: Settings, samples: List<FloatArray>) {
+        storeSamples(settings, samples)
+        // Eşik: her örneğin, KENDİSİ HARİÇ diğerlerine benzerliğine bakılır (kendisi dahil edilirse
+        // benzerlik olduğundan yüksek çıkar ve eşik fazla sıkı olur; sesinizi zor tanır).
+        val loo = samples.indices.map { i ->
+            val others = samples.filterIndexed { j, _ -> j != i }
+            val dim = samples[i].size
+            val m = FloatArray(dim)
+            others.forEach { s -> for (k in 0 until dim) m[k] += s[k] / others.size }
+            maxOf(cosine(samples[i], m), others.map { cosine(samples[i], it) }.sortedDescending().take(2).average().toFloat())
+        }.sorted()
+        // En kötü örneği gürültü sayıp ikinci en kötüsünden biraz aşağısını eşik al.
+        val ref = loo.getOrElse(1) { loo.first() }
+        settings.voiceThreshold = (ref - 0.08f).coerceIn(0.2f, 0.65f)
     }
 
     fun cosine(a: FloatArray, b: FloatArray): Float {
@@ -138,8 +196,9 @@ object VoiceId {
                     loop = MicLoop(
                         rec,
                         onResult = { json ->
-                            val hit = parse(json)
-                            if (hit?.voice != null && cont.isActive) cont.resume(hit.voice)
+                            // "Jarvis" farklı telaffuz edilip tanınmasa bile, yeterince uzun konuşma varsa ses izini al.
+                            val v = parse(json)?.voice ?: anyVoice(json)
+                            if (v != null && cont.isActive) cont.resume(v)
                         },
                         onError = { if (cont.isActive) cont.resume(null) },
                     )
@@ -156,8 +215,19 @@ object VoiceId {
         }
     }
 
+    /** Kelime ne olursa olsun, sonuçta yeterince uzun bir ses izi varsa onu döndürür. */
+    private fun anyVoice(json: String?): FloatArray? {
+        val o = runCatching { JSONObject(json ?: return null) }.getOrNull() ?: return null
+        if (o.optInt("spk_frames", 0) < 25) return null
+        return o.optJSONArray("spk")?.let { a -> FloatArray(a.length()) { a.getDouble(it).toFloat() } }
+    }
+
     private const val TAG = "JarvisVoice"
-}
+    private const val NEAR_MARGIN = 0.12f
+    private const val RETRY_WINDOW_MS = 7000L
+    private const val MAX_SAMPLES = 24
+    /** Öğrenme sırasında silinmeyecek ilk kayıt örneği sayısı. */
+    private const val ENROLL_KEEP = 8
 
 /**
  * Mikrofonu okuyup Vosk tanıyıcısına veren döngü. Vosk'un hazır SpeechService'i yerine bunu

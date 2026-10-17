@@ -85,6 +85,7 @@
                 <data android:mimeType="application/zip" />
                 <data android:mimeType="application/json" />
                 <data android:mimeType="text/html" />
+                <data android:mimeType="image/*" />
             </intent-filter>
         </activity>
 

@@ -33,6 +33,9 @@ object ToolRegistry {
         // Ekran kontrolü (erişilebilirlik servisi)
         EkraniOkuTool(),
         DokunTool(),
+        BasiliTutTool(),
+        SurukleTool(),
+        EkranaBakTool(),
         YazTool(),
         KaydirTool(),
         GeriTool(),

@@ -67,10 +67,21 @@ class ClaudeProvider(
         }
         fun textBlock(t: String) = JSONArray().put(JSONObject().put("type", "text").put("text", t.ifBlank { "..." }))
 
+        fun imageBlock(path: String) = Images.base64(path)?.let {
+            JSONObject().put("type", "image").put("source", JSONObject().put("type", "base64").put("media_type", "image/jpeg").put("data", it))
+        }
+        val send = recentImages(history)
         var lastWasNative = false
         for (t in history) {
             when (t) {
-                is Turn.User -> add("user", textBlock(t.text))
+                is Turn.User -> {
+                    val blocks = JSONArray()
+                    t.images.forEach { p -> if (p in send) imageBlock(p)?.let { blocks.put(it) } }
+                    val old = t.images.count { it !in send }
+                    val text = if (old > 0) "[$old görsel - artık gönderilmiyor] ${t.text}" else t.text
+                    blocks.put(JSONObject().put("type", "text").put("text", text.ifBlank { "..." }))
+                    add("user", blocks)
+                }
                 is Turn.Assistant -> {
                     lastWasNative = t.rawProvider == id && t.raw != null
                     if (lastWasNative) {
@@ -92,11 +103,16 @@ class ClaudeProvider(
                     if (lastWasNative) {
                         val blocks = JSONArray()
                         t.results.forEach {
-                            blocks.put(JSONObject().put("type", "tool_result").put("tool_use_id", safeId(it.callId)).put("content", it.content))
+                            val img = it.image?.takeIf { p -> p in send }?.let { p -> imageBlock(p) }
+                            val content: Any = if (img == null) it.content else JSONArray()
+                                .put(JSONObject().put("type", "text").put("text", it.content.ifBlank { "..." })).put(img)
+                            blocks.put(JSONObject().put("type", "tool_result").put("tool_use_id", safeId(it.callId)).put("content", content))
                         }
                         add("user", blocks)
                     } else {
-                        add("user", textBlock(flattenTools(t)))
+                        val blocks = textBlock(flattenTools(t))
+                        t.results.forEach { r -> r.image?.takeIf { it in send }?.let { imageBlock(it) }?.let { blocks.put(it) } }
+                        add("user", blocks)
                     }
                 }
             }

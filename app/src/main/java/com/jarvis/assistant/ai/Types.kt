@@ -7,7 +7,13 @@ import org.json.JSONObject
 data class ToolCall(val id: String, val name: String, val args: JSONObject)
 
 /** Aracın çalışınca döndürdüğü sonuç. */
-data class ToolResult(val callId: String, val name: String, val content: String)
+data class ToolResult(
+    val callId: String,
+    val name: String,
+    val content: String,
+    /** Araç bir görsel ürettiyse (ör. ekran görüntüsü) dosya yolu. */
+    val image: String? = null,
+)
 
 /** Yapay zekaya tanıtılan araç tanımı. parameters bir JSON Schema'dır. */
 data class ToolSpec(val name: String, val description: String, val parameters: JSONObject)
@@ -18,7 +24,8 @@ data class ToolSpec(val name: String, val description: String, val parameters: J
  * aynı sağlayıcıya AYNEN geri gönderilir (Gemini 3'ün thoughtSignature şartı).
  */
 sealed class Turn {
-    data class User(val text: String) : Turn()
+    /** images: kullanıcının eklediği görsellerin dosya yolları. */
+    data class User(val text: String, val images: List<String> = emptyList()) : Turn()
     data class Assistant(
         val text: String,
         val calls: List<ToolCall>,
@@ -28,7 +35,9 @@ sealed class Turn {
     data class Tools(val results: List<ToolResult>) : Turn()
 
     fun toJson(): JSONObject = when (this) {
-        is User -> JSONObject().put("t", "user").put("text", text)
+        is User -> JSONObject().put("t", "user").put("text", text).apply {
+            if (images.isNotEmpty()) put("images", JSONArray(images))
+        }
         is Assistant -> JSONObject().put("t", "assistant").put("text", text)
             .put("calls", JSONArray().apply {
                 calls.forEach { put(JSONObject().put("id", it.id).put("name", it.name).put("args", it.args)) }
@@ -36,13 +45,13 @@ sealed class Turn {
             .put("raw", raw ?: JSONObject.NULL)
             .put("rawProvider", rawProvider ?: JSONObject.NULL)
         is Tools -> JSONObject().put("t", "tools").put("results", JSONArray().apply {
-            results.forEach { put(JSONObject().put("id", it.callId).put("name", it.name).put("content", it.content)) }
+            results.forEach { put(JSONObject().put("id", it.callId).put("name", it.name).put("content", it.content).apply { it.image?.let { i -> put("image", i) } }) }
         })
     }
 
     companion object {
         fun fromJson(o: JSONObject): Turn? = when (o.optString("t")) {
-            "user" -> User(o.optString("text"))
+            "user" -> User(o.optString("text"), o.optJSONArray("images")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty())
             "assistant" -> {
                 val arr = o.optJSONArray("calls") ?: JSONArray()
                 Assistant(
@@ -59,7 +68,7 @@ sealed class Turn {
                 val arr = o.optJSONArray("results") ?: JSONArray()
                 Tools((0 until arr.length()).map {
                     val r = arr.getJSONObject(it)
-                    ToolResult(r.optString("id"), r.optString("name"), r.optString("content"))
+                    ToolResult(r.optString("id"), r.optString("name"), r.optString("content"), r.optString("image").ifBlank { null })
                 })
             }
             else -> null
@@ -77,4 +86,24 @@ interface AiProvider {
     val id: String
 
     suspend fun complete(system: String, history: List<Turn>, tools: List<ToolSpec>): AiReply
+}
+
+/**
+ * Yapay zekaya gerçekten gönderilecek görseller: sadece en son birkaç tanesi (maliyet ve hız için).
+ * Eski görseller metinde "[görsel]" olarak kalır.
+ */
+fun recentImages(history: List<Turn>, max: Int = 3): Set<String> {
+    val out = LinkedHashSet<String>()
+    for (t in history.asReversed()) {
+        val paths = when (t) {
+            is Turn.User -> t.images.asReversed()
+            is Turn.Tools -> t.results.mapNotNull { it.image }.asReversed()
+            else -> emptyList()
+        }
+        for (p in paths) {
+            if (out.size >= max) return out
+            if (java.io.File(p).exists()) out += p
+        }
+    }
+    return out
 }

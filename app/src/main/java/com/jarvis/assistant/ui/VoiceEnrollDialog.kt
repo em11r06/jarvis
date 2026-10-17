@@ -23,7 +23,13 @@ import com.jarvis.assistant.wake.VoiceId
 import com.jarvis.assistant.wake.WakeWordService
 import kotlinx.coroutines.delay
 
-private const val SAMPLES = 5
+private const val SAMPLES = 8
+
+/** Farklı koşullarda örnek alınsın diye her kayıtta değişen ipuçları. */
+private val TIPS = listOf(
+    "Normal sesinizle", "Biraz uzaktan, telefon masada", "Hızlıca, günlük konuşur gibi", "Biraz yüksek sesle",
+    "Alçak sesle", "Telefon cebinizdeymiş gibi uzaktan", "Yorgun/rahat bir tonla", "Normal sesinizle, tekrar",
+)
 
 /**
  * "Sesimi tanıt": kullanıcıdan 5 kez "Jarvis" demesini ister, ses izini kaydeder.
@@ -46,8 +52,8 @@ fun VoiceEnrollDialog(onDone: (Boolean) -> Unit) {
         val samples = mutableListOf<FloatArray>()
         var misses = 0
         try {
-            while (samples.size < SAMPLES && misses < 6) {
-                message = "Normal sesinizle \"Jarvis\" deyin (${samples.size + 1}/$SAMPLES)"
+            while (samples.size < SAMPLES && misses < 8) {
+                message = "\"Jarvis\" deyin (${samples.size + 1}/$SAMPLES)\n" + TIPS[samples.size % TIPS.size]
                 val v = VoiceId.captureSample(context)
                 if (v != null) {
                     samples += v
@@ -60,7 +66,7 @@ fun VoiceEnrollDialog(onDone: (Boolean) -> Unit) {
                     delay(900)
                 }
             }
-            if (samples.size >= 3) {
+            if (samples.size >= 4) {
                 VoiceId.saveEnrollment(settings, samples)
                 message = "Sesiniz kaydedildi. Artık sadece size tepki vereceğim."
             } else {

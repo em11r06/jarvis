@@ -135,9 +135,114 @@ class JarvisAccessibilityService : AccessibilityService() {
         return tap(r.exactCenterX(), r.exactCenterY())
     }
 
-    suspend fun tap(x: Float, y: Float): Boolean {
+    suspend fun tap(x: Float, y: Float, durationMs: Long = TAP_MS): Boolean {
         val p = Path().apply { moveTo(x, y) }
-        return gesture(GestureDescription.StrokeDescription(p, 0, 60))
+        return gesture(GestureDescription.StrokeDescription(p, 0, durationMs.coerceIn(1, 400)))
+    }
+
+    /** Öğenin ekrandaki orta noktası. */
+    fun centerOf(node: AccessibilityNodeInfo): Pair<Float, Float>? {
+        val r = Rect()
+        node.getBoundsInScreen(r)
+        if (r.isEmpty) return null
+        return r.exactCenterX() to r.exactCenterY()
+    }
+
+    /** Ekran yüzdesini (0-100) piksele çevirir. */
+    fun percentToPx(xPct: Double, yPct: Double): Pair<Float, Float> {
+        val dm = resources.displayMetrics
+        return (dm.widthPixels * xPct.coerceIn(0.0, 100.0) / 100).toFloat() to (dm.heightPixels * yPct.coerceIn(0.0, 100.0) / 100).toFloat()
+    }
+
+    /**
+     * Telefonun "basılı tutma" süresi (Erişilebilirlik > Dokunma ve basılı tutma gecikmesi ayarına göre değişir).
+     * Basılı tutma hareketi bundan biraz uzun yapılır ki her uygulamada algılansın.
+     */
+    fun autoLongPressMs(): Long = (android.view.ViewConfiguration.getLongPressTimeout() * 1.6).toLong().coerceIn(600, 3000)
+
+    /** Öğeye basılı tutar: önce uygulamanın kendi uzun basma işlemi, olmazsa parmak hareketi. */
+    suspend fun longPress(node: AccessibilityNodeInfo, durationMs: Long?): Boolean {
+        if (durationMs == null) {
+            var cur: AccessibilityNodeInfo? = node
+            var depth = 0
+            while (cur != null && depth < 6) {
+                if (cur.isLongClickable && cur.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK)) return true
+                cur = cur.parent
+                depth++
+            }
+        }
+        val (x, y) = centerOf(node) ?: return false
+        return longPressAt(x, y, durationMs)
+    }
+
+    suspend fun longPressAt(x: Float, y: Float, durationMs: Long?): Boolean {
+        val p = Path().apply { moveTo(x, y) }
+        return gesture(GestureDescription.StrokeDescription(p, 0, (durationMs ?: autoLongPressMs()).coerceIn(300, 10_000)))
+    }
+
+    /**
+     * Sürükler. holdFirst: önce basılı tutup "tutma" moduna geçer (simge/öğe taşıma için);
+     * false ise doğrudan çeker (kaydırıcı, çizim). Süre verilmezse mesafeye göre kendisi ayarlar.
+     */
+    suspend fun drag(x1: Float, y1: Float, x2: Float, y2: Float, holdFirst: Boolean, moveMs: Long?): Boolean {
+        val density = resources.displayMetrics.density
+        val distDp = kotlin.math.hypot((x2 - x1).toDouble(), (y2 - y1).toDouble()) / density
+        // Yaklaşık insan hızı: kısa mesafe hızlı, uzun mesafe daha uzun sürer.
+        val move = (moveMs ?: (250 + distDp * 2.2).toLong()).coerceIn(150, 5000)
+        val line = Path().apply { moveTo(x1, y1); lineTo(x2, y2) }
+        if (!holdFirst) return gesture(GestureDescription.StrokeDescription(line, 0, move))
+        // 1) Basılı tut  2) taşı  3) bırakmadan önce kısa bekle (hedef "yakalasın").
+        val hold = GestureDescription.StrokeDescription(Path().apply { moveTo(x1, y1) }, 0, autoLongPressMs(), true)
+        if (!gesture(hold)) return false
+        val moving = hold.continueStroke(line, 0, move, true)
+        if (!gesture(moving)) return false
+        val drop = moving.continueStroke(Path().apply { moveTo(x2, y2) }, 0, 350, false)
+        return gesture(drop)
+    }
+
+    /** Ekranın kaba bir "parmak izi": dokunmadan sonra bir şey değişti mi anlamak için. */
+    fun screenSignature(): Int {
+        val sb = StringBuilder()
+        fun walk(n: AccessibilityNodeInfo?, depth: Int) {
+            if (n == null || depth > 30 || sb.length > 4000) return
+            if (n.isVisibleToUser) {
+                n.text?.let { sb.append(it).append('|') }
+                if (n.isChecked) sb.append('✓')
+                if (n.isFocused) sb.append('f')
+            }
+            for (i in 0 until n.childCount) walk(n.getChild(i), depth + 1)
+        }
+        roots().forEach { walk(it.second, 0) }
+        return sb.toString().hashCode()
+    }
+
+    /**
+     * Ekran görüntüsünü alıp küçültülmüş JPEG olarak döndürür (yapay zekanın ekrana "bakması" için).
+     * Perde açıksa görüntüye girmesin diye kısa süre kaldırılır.
+     */
+    suspend fun screenshotJpeg(maxSide: Int = 1280): ByteArray? {
+        val hadCurtain = curtain != null
+        if (hadCurtain) { hideCurtain(); kotlinx.coroutines.delay(250) }
+        try {
+            val bmp = suspendCancellableCoroutine<android.graphics.Bitmap?> { cont ->
+                takeScreenshot(
+                    android.view.Display.DEFAULT_DISPLAY, mainExecutor,
+                    object : TakeScreenshotCallback {
+                        override fun onSuccess(result: ScreenshotResult) {
+                            val hw = android.graphics.Bitmap.wrapHardwareBuffer(result.hardwareBuffer, result.colorSpace)
+                            val soft = hw?.copy(android.graphics.Bitmap.Config.ARGB_8888, false)
+                            hw?.recycle()
+                            result.hardwareBuffer.close()
+                            if (cont.isActive) cont.resume(soft)
+                        }
+                        override fun onFailure(errorCode: Int) { if (cont.isActive) cont.resume(null) }
+                    },
+                )
+            } ?: return null
+            return com.jarvis.assistant.ai.Images.toJpeg(bmp, maxSide)
+        } finally {
+            if (hadCurtain) showCurtain()
+        }
     }
 
     /** Ekranı kaydırır. yon: asagi, yukari, sol, sag (içeriğin gideceği yön değil, parmağın tersi). */
@@ -296,6 +401,9 @@ class JarvisAccessibilityService : AccessibilityService() {
     companion object {
         /** Kesik mesajların sonundaki "devamını oku" yazıları. */
         val READ_MORE = listOf("Devamını okuyun", "Devamını oku", "Read more")
+
+        /** Normal dokunma süresi (ms). */
+        const val TAP_MS = 60L
 
         @Volatile
         var instance: JarvisAccessibilityService? = null

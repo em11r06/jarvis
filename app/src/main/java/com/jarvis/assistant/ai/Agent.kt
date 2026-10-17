@@ -34,6 +34,7 @@ class Agent(
      */
     suspend fun ask(
         userText: String,
+        images: List<String> = emptyList(),
         onToolUse: (String) -> Unit = {},
         onInterimText: suspend (String) -> Unit = {},
     ): String {
@@ -41,7 +42,7 @@ class Agent(
         (history.turns.lastOrNull() as? Turn.Assistant)?.takeIf { it.calls.isNotEmpty() }?.let { last ->
             history.turns += Turn.Tools(last.calls.map { ToolResult(it.id, it.name, "İptal edildi.") })
         }
-        history.turns += Turn.User(userText)
+        history.turns += Turn.User(userText, images)
         history.save()
         // İş bitince kullanıcıyı kaldığı yere döndürebilmek için şu anki ekranı hatırla.
         com.jarvis.assistant.core.ScreenReturn.remember()
@@ -95,7 +96,9 @@ class Agent(
                         "Hata: ${e.message ?: e.javaClass.simpleName}"
                     }
                 }
-                ToolResult(call.id, call.name, out.take(MAX_TOOL_RESULT))
+                // Araç bir görsel döndürdüyse (ekrana_bak) metinden ayırıp yapay zekaya görsel olarak ver.
+                val img = IMAGE_MARK.find(out)?.groupValues?.get(1)
+                ToolResult(call.id, call.name, IMAGE_MARK.replace(out, "").trim().take(MAX_TOOL_RESULT), img)
             }
             history.turns += Turn.Tools(results)
             history.save()
@@ -175,9 +178,12 @@ class Agent(
         /** Ekranda iş yapan, perdeyle örtülecek araçlar. */
         private val CURTAIN_TOOLS = setOf(
             "whatsapp_gonder", "sohbeti_oku", "sarki_cal",
-            "dokun", "yaz", "kaydir", "ekrani_oku", "geri", "yeniden_baslat",
+            "dokun", "yaz", "kaydir", "ekrani_oku", "geri", "yeniden_baslat", "basili_tut", "surukle",
         )
         private const val MAX_TOOL_RESULT = 6000
+
+        /** Araç sonucunda görsel dosyasını işaret eden kalıp: [[GORSEL:/yol/dosya.jpg]] */
+        val IMAGE_MARK = Regex("""\[\[GORSEL:([^\]]+)]]""")
         private const val COMPACT_AT = 40
         private const val KEEP_RECENT = 14
 
@@ -203,6 +209,9 @@ Bir WhatsApp sohbetindeki mesajları okumak ya da kopyalamak için (kullanıcın
 Kullanıcı için başka bir uygulamada iş yaptıysan (mesaj, form, arama, ayar vb.) iş bitince onceki_ekrana_don çağır ki kullanıcı kaldığı yere dönsün. Kullanıcı açıkça bir uygulamayı/şarkıyı/haritayı açmanı istediyse çağırma.
 Bir araç "kilit" derse kullanıcıdan telefonun kilidini açmasını iste; açtığını söyleyince işi tekrar dene.
 Tanımadığın bir uygulamada iş yapman gerekirse: uygulamayı aç, ekrani_oku ile ekrana bak, dokun/yaz/kaydir ile adım adım ilerle, her adımdan sonra tekrar ekrani_oku ile kontrol et.
+Menü açmak, seçmek ya da silmek için uzun basma gerekiyorsa basili_tut; bir öğeyi taşımak, sıralamak, kaydırıcıyı çekmek için surukle kullan. Süreleri sen vermezsen telefon kendisi uygun süreyi seçer; bir hareket işe yaramazsa sure_ms'i artırıp ya da azaltıp tekrar dene.
+ekrani_oku bir şeyi göstermiyorsa (resim, oyun, harita, video, grafik) ya da kullanıcı "ekrana bak", "bu ne" derse ekrana_bak ile ekran görüntüsünü incele. Görseldeki bir yere dokunman gerekirse x ve y'yi ekranın yüzdesi olarak ver (sol üst 0,0; sağ alt 100,100).
+Kullanıcı bir görsel eklediyse onu dikkatle incele: ne olduğunu, içindeki yazıları, sorulanı Türkçe ve kısa anlat.
 
 Mesaj göndermek, arama yapmak, bir şey silmek, satın almak, paylaşmak gibi geri alınamaz işlerden ÖNCE kullanıcıya ne yapacağını söyleyip sesli onay iste ("Ahmet'e 'geliyorum' yazıyorum, göndereyim mi?"). Kullanıcı açıkça evet derse aracı onaylandi=true ile çağır.
 Bir araç hata verirse kısaca söyle ve mümkünse başka yol dene.

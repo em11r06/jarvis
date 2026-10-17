@@ -38,6 +38,8 @@ object Schema {
             if (enum != null) put("enum", JSONArray(enum))
         }
 
+    fun num(desc: String): JSONObject = JSONObject().put("type", "number").put("description", desc)
+
     fun int(desc: String): JSONObject = JSONObject().put("type", "integer").put("description", desc)
 
     fun bool(desc: String): JSONObject = JSONObject().put("type", "boolean").put("description", desc)

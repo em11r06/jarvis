@@ -26,7 +26,7 @@ import kotlinx.coroutines.sync.withLock
 enum class AssistantState { IDLE, LISTENING, THINKING, SPEAKING }
 
 /** Ekranda gösterilen tek bir sohbet balonu. */
-data class ChatBubble(val fromUser: Boolean, val text: String)
+data class ChatBubble(val fromUser: Boolean, val text: String, val images: List<String> = emptyList())
 
 /**
  * Asistanın merkezi. Ekran ve arka plandaki uyandırma servisi aynı nesneyi kullanır.
@@ -59,9 +59,32 @@ class AssistantController(
     private val _partial = MutableStateFlow("")
     val partial: StateFlow<String> = _partial.asStateFlow()
 
+    /** Gönderilmeyi bekleyen, sohbete eklenmiş görseller. */
+    private val _pendingImages = MutableStateFlow<List<String>>(emptyList())
+    val pendingImages: StateFlow<List<String>> = _pendingImages.asStateFlow()
+
+    /** Seçilen/paylaşılan görselleri küçültüp bekleyenlere ekler. */
+    fun attachImages(uris: List<android.net.Uri>) {
+        scope.launch {
+            val paths = kotlinx.coroutines.withContext(Dispatchers.IO) {
+                uris.take(4).mapNotNull { com.jarvis.assistant.ai.Images.importUri(context, it) }
+            }
+            _pendingImages.update { (it + paths).takeLast(4) }
+        }
+    }
+
+    fun removePendingImage(path: String) = _pendingImages.update { it - path }
+
+    /** Bekleyen görsellerle birlikte gönderir. */
+    fun sendWithPending(text: String) {
+        val imgs = _pendingImages.value
+        _pendingImages.value = emptyList()
+        sendText(text, imgs)
+    }
+
     private fun bubblesFromHistory(): List<ChatBubble> = history.turns.mapNotNull {
         when (it) {
-            is Turn.User -> ChatBubble(true, it.text)
+            is Turn.User -> ChatBubble(true, it.text, it.images)
             is Turn.Assistant -> it.text.takeIf { t -> t.isNotBlank() }?.let { t -> ChatBubble(false, t) }
             else -> null
         }
@@ -70,13 +93,13 @@ class AssistantController(
     private fun addBubble(b: ChatBubble) = _bubbles.update { (it + b).takeLast(100) }
 
     /** Yazıyla gönderilen mesaj. Cevap yine sesli okunur. */
-    fun sendText(text: String) {
-        val clean = text.trim()
+    fun sendText(text: String, images: List<String> = emptyList()) {
+        val clean = text.trim().ifEmpty { if (images.isNotEmpty()) "Bu görsele bak ve ne olduğunu anlat." else "" }
         if (clean.isEmpty()) return
         speaker.stop()
         sessionJob?.cancel()
         sessionJob = scope.launch {
-            busy.withLock { handle(clean) }
+            busy.withLock { handle(clean, images = images) }
             _state.value = AssistantState.IDLE
         }
     }
@@ -152,8 +175,8 @@ class AssistantController(
         return h.text + "\n[Ses tanıma emin değil; olası alternatifler: " + alts.joinToString(" | ") + ". Bağlama göre doğrusunu seç.]"
     }
 
-    private suspend fun handle(text: String, forAi: String = text) {
-        addBubble(ChatBubble(true, text))
+    private suspend fun handle(text: String, forAi: String = text, images: List<String> = emptyList()) {
+        addBubble(ChatBubble(true, text, images))
         _state.value = AssistantState.THINKING
         val answer = try {
             // İnternet yoksa telefon komutlarını çevrimdışı beyinle yap.
@@ -166,6 +189,7 @@ class AssistantController(
             }
             agent.ask(
                 forAi,
+                images,
                 onToolUse = { name -> _partial.value = "⚙ $name" },
                 onInterimText = { interim ->
                     addBubble(ChatBubble(false, interim))

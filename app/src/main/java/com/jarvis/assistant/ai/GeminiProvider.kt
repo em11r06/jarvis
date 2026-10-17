@@ -103,9 +103,10 @@ class GeminiProvider(
     private fun buildContents(history: List<Turn>, model: String, dummySignature: Boolean): JSONArray {
         val out = JSONArray()
         var lastWasNative = false
+        val send = recentImages(history)
         for (t in history) {
             when (t) {
-                is Turn.User -> out.put(textContent("user", t.text))
+                is Turn.User -> out.put(userContent(t, send))
                 is Turn.Assistant -> {
                     lastWasNative = t.rawProvider == "$id:$model" && t.raw != null
                     if (lastWasNative) {
@@ -138,14 +139,30 @@ class GeminiProvider(
                             if (!r.callId.startsWith("local_")) fr.put("id", r.callId)
                             parts.put(JSONObject().put("functionResponse", fr))
                         }
+                        t.results.forEach { r -> r.image?.takeIf { it in send }?.let { imagePart(it) }?.let { parts.put(it) } }
                         out.put(JSONObject().put("role", "user").put("parts", parts))
                     } else {
-                        out.put(textContent("user", flattenTools(t)))
+                        val c = textContent("user", flattenTools(t))
+                        t.results.forEach { r -> r.image?.takeIf { it in send }?.let { imagePart(it) }?.let { c.getJSONArray("parts").put(it) } }
+                        out.put(c)
                     }
                 }
             }
         }
         return out
+    }
+
+    private fun imagePart(path: String): JSONObject? = Images.base64(path)?.let {
+        JSONObject().put("inlineData", JSONObject().put("mimeType", "image/jpeg").put("data", it))
+    }
+
+    private fun userContent(t: Turn.User, send: Set<String>): JSONObject {
+        val parts = JSONArray()
+        t.images.forEach { p -> if (p in send) imagePart(p)?.let { parts.put(it) } }
+        val old = t.images.count { it !in send }
+        val text = if (old > 0) "[$old görsel - artık gönderilmiyor] ${t.text}" else t.text
+        parts.put(JSONObject().put("text", text.ifBlank { "..." }))
+        return JSONObject().put("role", "user").put("parts", parts)
     }
 
     private fun textContent(role: String, text: String) = JSONObject().put("role", role)

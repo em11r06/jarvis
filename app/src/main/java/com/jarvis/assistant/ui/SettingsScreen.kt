@@ -66,7 +66,10 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
     var picoKey by remember { mutableStateOf(s.picovoiceKey) }
     var elevenKey by remember { mutableStateOf(s.elevenKey) }
     var wake by remember { mutableStateOf(s.wakeEnabled) }
-    var greeting by remember { mutableStateOf(s.wakeGreeting) }
+    var wakeSound by remember { mutableStateOf(s.wakeSound) }
+    var wakePhrases by remember { mutableStateOf(s.wakePhrases) }
+    var wakeVolume by remember { mutableFloatStateOf(s.wakeVolume) }
+    var hasWakeFile by remember { mutableStateOf(WakeWordService.wakeFile(context).exists()) }
     var hasPrint by remember { mutableStateOf(s.voicePrint.isNotBlank()) }
     var ownNumber by remember { mutableStateOf(s.ownNumber) }
     var curtain by remember { mutableStateOf(s.curtainEnabled) }
@@ -85,6 +88,20 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
             styleKb = StyleLearner.storageKb(context)
             if (styleOwner.isBlank()) styleOwner = senders.firstOrNull()?.first.orEmpty()
             styleStatus = if (f > 0) "$n mesaj ve $f takip edilen hesap yüklendi." else if (n == 0) "Yeni mesaj bulunamadı. Dosya zaten yüklenmiş olabilir; değilse WhatsApp dışa aktarma (.txt/.zip) ya da Instagram bilgi indirme ZIP'i olmalı." else "$n mesaj yüklendi."
+        }
+    }
+    // Uyanma sesi dosyası uygulamanın içine kopyalanır (asıl dosya silinse de çalışsın); en fazla 3 MB.
+    val pickWakeFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch {
+            val ok = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    val bytes = context.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
+                    require(bytes.size <= 3_000_000) { "dosya çok büyük" }
+                    WakeWordService.wakeFile(context).writeBytes(bytes)
+                }.isSuccess
+            }
+            hasWakeFile = ok && WakeWordService.wakeFile(context).exists()
+            if (!ok) android.widget.Toast.makeText(context, "Ses dosyası okunamadı.", android.widget.Toast.LENGTH_SHORT).show()
         }
     }
     var threshold by remember { mutableFloatStateOf(s.voiceThreshold) }
@@ -172,21 +189,47 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
                 })
             }
             if (message.isNotBlank()) Text(message, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
-                Column(Modifier.weight(1f)) {
-                    Text("Uyanınca sesli cevap ver", color = MaterialTheme.colorScheme.onSurface)
+            Text("Uyanınca", color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 10.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+            ) {
+                listOf(
+                    Settings.WAKE_SPEAK to "Söz söylesin", Settings.WAKE_BEEP to "Bip", Settings.WAKE_FILE to "Kendi sesim", Settings.WAKE_SILENT to "Sessiz",
+                ).forEach { (mode, label) ->
+                    FilterChip(wakeSound == mode, { wakeSound = mode; s.wakeSound = mode }, { Text(label) })
+                }
+            }
+            when (wakeSound) {
+                Settings.WAKE_SPEAK -> OutlinedTextField(
+                    wakePhrases, { wakePhrases = it; s.wakePhrases = it },
+                    label = { Text("Söylenecekler (her satıra bir tane, rastgele seçilir)") },
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                    minLines = 2,
+                )
+                Settings.WAKE_FILE -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+                    Button(onClick = { pickWakeFile.launch(arrayOf("audio/*")) }) { Text(if (hasWakeFile) "Sesi değiştir" else "Ses dosyası seç") }
                     Text(
-                        if (greeting) "\"Buyrun efendim\" gibi kısa bir cevap" else "Kısa bir bip sesi",
+                        if (hasWakeFile) "  Seçildi (ilk 5 saniye çalar)" else "  Kısa bir mp3/ogg/wav seçin",
                         fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Switch(checked = greeting, onCheckedChange = { greeting = it; s.wakeGreeting = it })
+            }
+            if (wakeSound == Settings.WAKE_FILE || wakeSound == Settings.WAKE_BEEP) {
+                Text("Ses düzeyi: %${(wakeVolume * 100).roundToInt()}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+                Slider(value = wakeVolume, onValueChange = { wakeVolume = it }, valueRange = 0.1f..1f, onValueChangeFinished = { s.wakeVolume = wakeVolume })
+            }
+            if (wakeSound != Settings.WAKE_SILENT) {
+                OutlinedButton(
+                    onClick = { scope.launch { WakeWordService.playWakeSound(context) } },
+                    modifier = Modifier.padding(top = 4.dp),
+                ) { Text("Dene") }
             }
 
             SectionTitle("Sesimi tanı")
             Text(
-                if (hasPrint) "Sesiniz kayıtlı: Jarvis sadece size tepki verir (eşik ${"%.2f".format(threshold)})."
-                else "Kayıt yok: \"Jarvis\" diyen herkese (ve bazen şarkılara) tepki verebilir. 5 kez \"Jarvis\" diyerek sesinizi tanıtın.",
+                if (hasPrint) "Sesiniz kayıtlı: Jarvis sadece size tepki verir (eşik ${"%.2f".format(threshold)}). İlk seferde tanımazsa hemen bir daha \"Jarvis\" deyin; kabul eder ve sesinizi öğrenir. Eski sürümde kaydettiyseniz bir kez \"Yeniden kaydet\" yapın."
+                else "Kayıt yok: \"Jarvis\" diyen herkese (ve bazen şarkılara) tepki verebilir. 8 kez \"Jarvis\" diyerek sesinizi tanıtın.",
                 fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
@@ -194,7 +237,7 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
                     if (Permissions.has(context, Manifest.permission.RECORD_AUDIO)) enrolling = true
                     else message = "Önce mikrofon izni verin (Kurulum sihirbazı)."
                 }) { Text(if (hasPrint) "Yeniden kaydet" else "Sesimi tanıt") }
-                if (hasPrint) OutlinedButton(onClick = { s.voicePrint = ""; hasPrint = false }) { Text("Sil") }
+                if (hasPrint) OutlinedButton(onClick = { s.voicePrint = ""; s.voiceSamples = ""; hasPrint = false }) { Text("Sil") }
             }
             if (hasPrint) {
                 Text("Seçicilik: sizi tanımazsa düşürün, başkalarına tepki verirse artırın.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))

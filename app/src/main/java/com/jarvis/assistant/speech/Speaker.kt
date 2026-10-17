@@ -186,6 +186,32 @@ class Speaker(private val context: Context, private val settings: Settings) {
         }
     }
 
+    /** Kullanıcının seçtiği uyanma sesini çalar (en fazla 5 saniye). */
+    suspend fun playWakeFile(file: File, volume: Float) {
+        acquireFocus()
+        try {
+            kotlinx.coroutines.withTimeoutOrNull(5000) {
+                withContext(Dispatchers.Main) {
+                    suspendCancellableCoroutine { cont ->
+                        val mp = MediaPlayer()
+                        mp.setAudioAttributes(attrs)
+                        runCatching {
+                            mp.setDataSource(file.absolutePath)
+                            mp.setVolume(volume, volume)
+                            mp.setOnCompletionListener { it.release(); if (cont.isActive) cont.resume(Unit) }
+                            mp.setOnErrorListener { p, _, _ -> p.release(); if (cont.isActive) cont.resume(Unit); true }
+                            mp.prepare()
+                            mp.start()
+                        }.onFailure { mp.release(); if (cont.isActive) cont.resume(Unit) }
+                        cont.invokeOnCancellation { runCatching { mp.stop(); mp.release() } }
+                    }
+                }
+            }
+        } finally {
+            releaseFocus()
+        }
+    }
+
     private suspend fun cachedEleven(text: String, voiceId: String): File {
         val dir = File(context.filesDir, "voice_cache").apply { mkdirs() }
         val key = (voiceId + "|" + settings.elevenModel + "|" + text).hashCode().toUInt().toString(16)
