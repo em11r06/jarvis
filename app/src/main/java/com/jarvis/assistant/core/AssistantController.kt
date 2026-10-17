@@ -183,13 +183,9 @@ class AssistantController(
             !com.jarvis.assistant.ai.GeminiQuota.billingBlocked()
         if (cloud) {
             cloudListener.hints = hints
-            cloudListener.context_ = history.turns.takeLast(8).mapNotNull {
-                when (it) {
-                    is Turn.User -> "Kullanıcı: ${it.text.take(200)}"
-                    is Turn.Assistant -> it.text.takeIf { t -> t.isNotBlank() }?.let { t -> "Jarvis: ${t.take(250)}" }
-                    else -> null
-                }
-            }.joinToString(" / ")
+            // Sadece Jarvis'in son sözü verilir; kullanıcının eski cümleleri verilirse sessizlikte onları "duymuş" gibi yazabiliyor.
+            cloudListener.context_ = history.turns.lastOrNull { it is Turn.Assistant && it.text.isNotBlank() }
+                ?.let { (it as Turn.Assistant).text.take(300) }.orEmpty()
             when (val r = cloudListener.listen(timeout) { _partial.value = it }) {
                 is com.jarvis.assistant.speech.CloudListener.Result.Text -> return r.heard
                 is com.jarvis.assistant.speech.CloudListener.Result.NoSpeech -> return null

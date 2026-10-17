@@ -45,6 +45,11 @@ class CloudListener(private val context: Context, private val settings: Settings
 
     suspend fun listen(startTimeoutMs: Long, onPartial: (String) -> Unit): Result {
         val pcm = withContext(Dispatchers.IO) { record(startTimeoutMs, onPartial) } ?: return Result.NoSpeech
+        // Uyandıktan sonra konuşan kullanıcı değilse (TV, başka biri) yok say.
+        if (!com.jarvis.assistant.wake.VoiceId.commandIsUser(context, settings, pcm)) {
+            Log.d(TAG, "Konuşan kullanıcı değil, yok sayıldı")
+            return Result.NoSpeech
+        }
         onPartial("Anlıyorum…")
         val text = runCatching { transcribe(pcm) }
             .onFailure { Log.w(TAG, "Gemini yazıya dökemedi", it) }
@@ -77,6 +82,7 @@ class CloudListener(private val context: Context, private val settings: Settings
         var noise = 0.0
         var frames = 0
         var speechFrames = 0
+        var voiced = 0
         var silenceMs = 0
         var started = false
         var elapsed = 0
@@ -98,7 +104,7 @@ class CloudListener(private val context: Context, private val settings: Settings
                 if (frames <= 15) { // ilk 300 ms: ortam gürültüsü
                     noise = if (frames == 1) rms else noise * 0.8 + rms * 0.2
                 }
-                val threshold = maxOf(noise * 2.8, 350.0)
+                val threshold = maxOf(noise * 3.0, 600.0)
                 val loud = rms > threshold
                 if (!started) {
                     preRoll.addLast(bytes)
@@ -118,6 +124,7 @@ class CloudListener(private val context: Context, private val settings: Settings
                     continue
                 }
                 out.write(bytes)
+                if (loud) voiced++
                 silenceMs = if (loud) 0 else silenceMs + 20
                 if (silenceMs >= END_SILENCE_MS || out.size() >= rate * 2 * MAX_SECONDS) break
             }
@@ -126,7 +133,8 @@ class CloudListener(private val context: Context, private val settings: Settings
             rec.release()
         }
         // Çok kısa ses (öksürük, tık) konuşma sayılmaz.
-        return out.toByteArray().takeIf { started && it.size > rate * 2 * 4 / 10 }
+        // Çok kısa ses (öksürük, tık, kapı) konuşma sayılmaz: en az ~0,4 sn gerçek ses olmalı.
+        return out.toByteArray().takeIf { started && voiced >= 20 }
     }
 
     private suspend fun transcribe(pcm: ByteArray): String? {
@@ -141,9 +149,10 @@ class CloudListener(private val context: Context, private val settings: Settings
             append("Söyleneni kelimesi kelimesine, doğru Türkçe yazımla yazıya dök; anlamı değiştirme, toparlama, kısaltma. ")
             append("Sadece söylenen metni yaz; açıklama, tırnak, etiket ekleme, cevap verme. ")
             append("Belirsiz bir kelime olursa konuşmanın bağlamına ve kişinin konuşma tarzına en uygun olanı seç. ")
-            append("Kayıtta anlaşılır konuşma yoksa sadece - yaz.")
+            append("ÇOK ÖNEMLİ: Sadece kayıtta gerçekten duyulan sözleri yaz. Kayıtta konuşma yoksa ya da sadece gürültü, müzik, ")
+            append("TV sesi veya anlaşılmayan mırıltı varsa sadece - yaz. Aşağıdaki bağlamdan ya da tahminle hiçbir cümle uydurma.")
             if (style.isNotBlank()) append("\nKişinin konuşma tarzı (sık kullandığı kelimeler ve hitaplar): ").append(style.take(1200))
-            if (context_.isNotBlank()) append("\nKonuşmanın son kısmı (doğru anlamana yardımcı olsun): ").append(context_.take(1200))
+            if (context_.isNotBlank()) append("\nJarvis'in kişiye son söylediği (sadece belirsiz kelimelerin yazımı için ipucu, kayıtta yoksa kullanma): ").append(context_.take(400))
             if (hints.isNotEmpty()) {
                 append("\nKişinin rehberindeki isimler ve telefonundaki uygulamalar (bunlardan biri söylenmişse aynen bu yazımla yaz): ")
                 append(hints.take(250).joinToString(", "))

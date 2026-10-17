@@ -127,6 +127,8 @@ class WakeWordService : Service() {
         } finally {
             speaker.releaseFocus()
             inSession = false
+            // Oturum biter bitmez Jarvis'in kendi sesinin yankısıyla tekrar uyanmasın.
+            VoiceId.quietUntil = System.currentTimeMillis() + 2000
             resumeDetection()
         }
     }

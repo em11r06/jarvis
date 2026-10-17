@@ -64,6 +64,8 @@ class Settings(context: Context) {
     var voicePrint by str("voice_print", "")
     /** Ses tanıtırken alınan ve sonradan öğrenilen ses örnekleri (";" ile ayrılmış). */
     var voiceSamples by str("voice_samples", "")
+    /** Eski sürümün otomatik öğrendiği (gürültü olabilecek) örnekler temizlendi mi? */
+    var voiceCleaned by bool("voice_cleaned", false)
     /** Ses izi benzerlik eşiği; büyüdükçe daha seçici. */
     var voiceThreshold by float("voice_threshold", 0.5f)
 

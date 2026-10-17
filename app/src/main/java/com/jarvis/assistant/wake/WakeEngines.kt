@@ -81,6 +81,7 @@ class VoskEngine(
     override fun init(onReady: () -> Unit, onError: (String) -> Unit) {
         scope.launch {
             try {
+                VoiceId.cleanLearned(settings)
                 val (m, s) = VoskModels.load(context.applicationContext)
                 model = m
                 speaker = s

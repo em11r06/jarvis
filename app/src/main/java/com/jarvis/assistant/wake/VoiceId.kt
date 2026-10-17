@@ -189,20 +189,21 @@ object VoiceId {
         return WakeHit(conf, spk)
     }
 
-    /** Son "az farkla" reddedilen denemenin zamanı: kullanıcı hemen tekrar "Jarvis" derse kabul edilir. */
-    @Volatile private var nearMissAt = 0L
-
     /**
-     * Uyanmalı mı? Kelime güveni yeterli olmalı; ses kaydı varsa konuşan da kullanıcı olmalı.
-     * Kayıt yokken müzik çalarken daha sıkı davranır.
-     * Ses az farkla tutmazsa ve kullanıcı birkaç saniye içinde tekrar "Jarvis" derse kabul eder
-     * ve o sesi de öğrenir (sesiniz zamanla daha iyi tanınır).
+     * Uyanmalı mı? Sıkı kurallar (yanlışlıkla uyanmasın):
+     * - Uyandırma kelimesi yüksek güvenle duyulmuş olmalı.
+     * - Ses kaydı varsa konuşmadan ses izi çıkarılabilmiş ve kullanıcıya benziyor olmalı.
+     *   Ses izi yoksa (çok kısa/gürültü) reddedilir. Reddedilen sesler asla öğrenilmez.
+     * - Bir oturum bittikten hemen sonra (Jarvis'in kendi sesinin yankısı) uyanmaz.
      */
     fun accept(context: Context, settings: Settings, hit: WakeHit): Boolean {
+        if (System.currentTimeMillis() < quietUntil) {
+            Log.d(TAG, "Reddedildi: oturum yeni bitti")
+            return false
+        }
         val music = context.getSystemService(AudioManager::class.java).isMusicActive
         val print = loadPrint(settings)
         val minConf = when {
-            print != null -> 0.6
             music -> 0.95
             else -> 0.85
         }
@@ -211,27 +212,50 @@ object VoiceId {
             return false
         }
         if (print == null) return true
-        val now = System.currentTimeMillis()
-        val v = hit.voice
-        val sim = if (v != null) score(settings, v, print) else -1f
-        // Kulaklıkla ses farklı mikrofondan/uzaktan gelir; ses izi daha az benzer çıkar, eşiği biraz gevşet.
+        val v = hit.voice ?: return false.also { Log.d(TAG, "Reddedildi: ses izi yok") }
+        val sim = score(settings, v, print)
+        // Kulaklıkla ses farklı mikrofondan/uzaktan gelir; ses izi biraz daha az benzer çıkar.
         val th = settings.voiceThreshold - if (com.jarvis.assistant.core.AudioRoute.headset(context)) HEADSET_SLACK else 0f
-        if (sim >= th) {
-            Log.d(TAG, "Ses benzerliği $sim (eşik $th) -> kabul")
-            if (v != null && sim < th + 0.15f) learn(settings, v) // sınırdaki örnekler öğretici
-            nearMissAt = 0
-            return true
-        }
-        val near = v == null || sim >= th - NEAR_MARGIN
-        if (near && now - nearMissAt < RETRY_WINDOW_MS) {
-            Log.d(TAG, "Ses benzerliği $sim: tekrar söylendi -> kabul ve öğren")
-            if (v != null) learn(settings, v)
-            nearMissAt = 0
-            return true
-        }
-        if (near) nearMissAt = now
-        Log.d(TAG, "Ses benzerliği $sim (eşik $th) -> ret${if (near) " (az farkla)" else ""}")
-        return false
+        val ok = sim >= th
+        Log.d(TAG, "Ses benzerliği $sim (eşik $th) -> ${if (ok) "kabul" else "ret"}")
+        return ok
+    }
+
+    /** Bu zamana kadar uyandırma kabul edilmez (oturum sonrası yankı ve kuyruk sesler için). */
+    @Volatile var quietUntil = 0L
+
+    /**
+     * Uyandıktan sonra söylenen komutun sesi kullanıcıya mı ait? (TV, başka biri konuşuyorsa reddedilir.)
+     * Ses kaydı yoksa ya da kontrol edilemiyorsa true döner.
+     */
+    suspend fun commandIsUser(context: Context, settings: Settings, pcm: ByteArray): Boolean = withContext(Dispatchers.IO) {
+        val print = loadPrint(settings) ?: return@withContext true
+        val (model, spk) = runCatching { VoskModels.load(context) }.getOrNull() ?: return@withContext true
+        if (spk == null) return@withContext true
+        val v = runCatching {
+            Recognizer(model, VoskModels.SAMPLE_RATE, spk).use { rec ->
+                rec.acceptWaveForm(pcm, pcm.size)
+                val o = JSONObject(rec.finalResult)
+                if (o.optInt("spk_frames", 0) < 30) null
+                else o.optJSONArray("spk")?.let { a -> FloatArray(a.length()) { a.getDouble(it).toFloat() } }
+            }
+        }.getOrNull() ?: return@withContext true
+        val sim = score(settings, v, print)
+        // Komutlar uzun ve farklı kelimeler içerdiği için kelime eşiğinden biraz daha hoşgörülü.
+        val th = settings.voiceThreshold - COMMAND_SLACK - if (com.jarvis.assistant.core.AudioRoute.headset(context)) HEADSET_SLACK else 0f
+        Log.d(TAG, "Komut sesi benzerliği $sim (eşik $th)")
+        sim >= th
+    }
+
+    /**
+     * Önceki sürümlerin otomatik "öğrenme"si gürültüleri de ses kaydına eklemiş olabilir:
+     * sadece ses tanıtırken alınan ilk örnekleri bırakır.
+     */
+    fun cleanLearned(settings: Settings) {
+        if (settings.voiceCleaned) return
+        settings.voiceCleaned = true
+        val samples = loadSamples(settings)
+        if (samples.size > ENROLL_KEEP) storeSamples(settings, samples.take(ENROLL_KEEP))
     }
 
     /** Ortalama ses izine ve kayıtlı örneklere göre benzerlik: hangisi daha yakınsa. */
@@ -262,19 +286,9 @@ object VoiceId {
         settings.voicePrint = mean.joinToString(",")
     }
 
-    /** Kabul edilen bir sesi örneklere ekler (en eski örnekler zamanla düşer, kayıt örnekleri korunur). */
-    private fun learn(settings: Settings, v: FloatArray) {
-        // Eski sürümde sadece ortalama saklanıyordu: onu ilk örnek say.
-        val samples = loadSamples(settings).ifEmpty { listOfNotNull(loadPrint(settings)) }.toMutableList()
-        if (samples.isEmpty() || samples.first().size != v.size) return
-        samples += v
-        // İlk kayıtlı örnekleri koru, öğrenilenlerden en eskisini at.
-        while (samples.size > MAX_SAMPLES) samples.removeAt(ENROLL_KEEP.coerceAtMost(samples.size - 1))
-        storeSamples(settings, samples)
-    }
-
     /** Kayıtlı örneklerden ses izi ve eşik hesaplar, ayarlara kaydeder. */
     fun saveEnrollment(settings: Settings, samples: List<FloatArray>) {
+        settings.voiceCleaned = true
         storeSamples(settings, samples)
         // Eşik: her örneğin, KENDİSİ HARİÇ diğerlerine benzerliğine bakılır (kendisi dahil edilirse
         // benzerlik olduğundan yüksek çıkar ve eşik fazla sıkı olur; sesinizi zor tanır).
@@ -345,11 +359,10 @@ object VoiceId {
     }
 
     private const val TAG = "JarvisVoice"
-    private const val NEAR_MARGIN = 0.12f
-    private const val HEADSET_SLACK = 0.1f
-    private const val RETRY_WINDOW_MS = 7000L
+    private const val HEADSET_SLACK = 0.05f
+    private const val COMMAND_SLACK = 0.08f
     private const val MAX_SAMPLES = 24
-    /** Öğrenme sırasında silinmeyecek ilk kayıt örneği sayısı. */
+    /** Ses tanıtırken alınan örnek sayısı. */
     private const val ENROLL_KEEP = 8
 }
 
