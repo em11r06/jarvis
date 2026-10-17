@@ -38,7 +38,7 @@ object Updater {
     private const val REPO = "em11r06/jarvis"
     private const val CHANNEL = "jarvis_update"
     private const val NOTIF_ID = 77
-    private const val CHECK_INTERVAL_MS = 3 * 60 * 60 * 1000L // 3 saat
+    private const val CHECK_INTERVAL_MS = 30 * 60 * 1000L // 30 dakika
 
     sealed class State {
         data object Idle : State()
@@ -63,14 +63,30 @@ object Updater {
         val last = prefs.getLong("last_check", 0)
         if (!force && System.currentTimeMillis() - last < CHECK_INTERVAL_MS && _state.value !is State.Ready) return
         prefs.edit().putLong("last_check", System.currentTimeMillis()).apply()
-        scope.launch { checkAndDownload(context.applicationContext) }
+        scope.launch { checkAndDownload(context.applicationContext, background = !force) }
+    }
+
+    /** Ölçülü bağlantıda (mobil veri) mıyız? Büyük indirmeyi sormadan yapmamak için. */
+    private fun isMetered(context: Context): Boolean =
+        context.getSystemService(android.net.ConnectivityManager::class.java).isActiveNetworkMetered
+
+    /** Bildirime dokununca: indirilmediyse indir, sonra kurulum ekranını aç. */
+    fun downloadAndInstall(context: Context) {
+        if (_state.value is State.Ready || fromCache(context) != null) {
+            install(context)
+            return
+        }
+        scope.launch {
+            checkAndDownload(context.applicationContext)
+            if (_state.value is State.Ready) kotlinx.coroutines.withContext(Dispatchers.Main) { install(context) }
+        }
     }
 
     /**
      * Yeni sürüm varsa indirir. Sesli komut aracı da bunu kullanır.
      * @return kullanıcıya söylenecek kısa durum metni
      */
-    suspend fun checkAndDownload(context: Context): String = lock.withLock {
+    suspend fun checkAndDownload(context: Context, background: Boolean = false): String = lock.withLock {
         (_state.value as? State.Ready)?.let { if (it.file.exists()) return "Sürüm ${it.version} indirildi, kurulmayı bekliyor." }
         _state.value = State.Checking
         try {
@@ -97,6 +113,12 @@ object Updater {
                 ?: return "Yeni sürümde APK yok.".also { _state.value = State.Error(it) }
             val notes = json.optString("body").lineSequence().firstOrNull { it.isNotBlank() }.orEmpty()
 
+            // Arka plan kontrolünde mobil verideyse indirmeden sadece haber ver.
+            if (background && isMetered(context)) {
+                _state.value = State.Idle
+                notifyAvailable(context, version, notes)
+                return "Sürüm $version var; mobil veride olduğunuz için indirmedim."
+            }
             val file = download(context, url, version)
             _state.value = State.Ready(version, notes, file)
             notifyReady(context, version, notes)
@@ -173,6 +195,29 @@ object Updater {
         val v = Regex("Jarvis-(\\d+)\\.apk").find(f.name)?.groupValues?.get(1)?.toIntOrNull() ?: return null
         if (v <= currentVersion) return null
         return State.Ready(v, "", f).also { _state.value = it }
+    }
+
+    private fun notifyAvailable(context: Context, version: Int, notes: String) {
+        // Aynı sürüm için tekrar tekrar bildirim gösterme.
+        val prefs = context.getSharedPreferences("jarvis_update", Context.MODE_PRIVATE)
+        if (prefs.getInt("notified_version", 0) >= version) return
+        prefs.edit().putInt("notified_version", version).apply()
+        val nm = context.getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannel(NotificationChannel(CHANNEL, "Güncellemeler", NotificationManager.IMPORTANCE_DEFAULT))
+        val pi = PendingIntent.getActivity(
+            context, 4,
+            Intent(context, MainActivity::class.java).putExtra(EXTRA_INSTALL, true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val n = Notification.Builder(context, CHANNEL)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Jarvis'in yeni sürümü var (sürüm $version)")
+            .setContentText(notes.ifBlank { "İndirip kurmak için dokunun" })
+            .setStyle(Notification.BigTextStyle().bigText((notes.ifBlank { "" } + "\nİndirip kurmak için dokunun (~110 MB).").trim()))
+            .setContentIntent(pi)
+            .setAutoCancel(true)
+            .build()
+        runCatching { nm.notify(NOTIF_ID, n) }
     }
 
     private fun notifyReady(context: Context, version: Int, notes: String) {

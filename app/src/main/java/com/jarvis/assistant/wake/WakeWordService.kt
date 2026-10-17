@@ -67,6 +67,7 @@ class WakeWordService : Service() {
         assistant.afterSession = { if (!inSession) resumeDetection() }
 
         if (engine == null) initEngine() else resumeDetection()
+        startUpdateChecks()
         return START_STICKY
     }
 
@@ -136,6 +137,19 @@ class WakeWordService : Service() {
             speaker.releaseFocus()
             inSession = false
             resumeDetection()
+        }
+    }
+
+    private var updateJob: kotlinx.coroutines.Job? = null
+
+    /** Servis çalıştığı sürece 30 dakikada bir yeni sürüm kontrolü (bildirimle haber verir). */
+    private fun startUpdateChecks() {
+        if (updateJob?.isActive == true) return
+        updateJob = scope.launch {
+            while (true) {
+                com.jarvis.assistant.update.Updater.checkInBackground(applicationContext)
+                kotlinx.coroutines.delay(30 * 60 * 1000L)
+            }
         }
     }
 

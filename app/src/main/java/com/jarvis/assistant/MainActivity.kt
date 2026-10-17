@@ -105,7 +105,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
-        if (intent?.getBooleanExtra(Updater.EXTRA_INSTALL, false) == true) Updater.install(this)
+        if (intent?.getBooleanExtra(Updater.EXTRA_INSTALL, false) == true) Updater.downloadAndInstall(this)
         // Paylaşılan sohbet dökümü: konuşma tarzı için içe aktar.
         if (intent?.action == Intent.ACTION_SEND || intent?.action == Intent.ACTION_SEND_MULTIPLE) {
             @Suppress("DEPRECATION")
