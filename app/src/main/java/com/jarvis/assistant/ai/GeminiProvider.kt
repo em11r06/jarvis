@@ -38,7 +38,8 @@ class GeminiProvider(
         val now = System.currentTimeMillis()
         // Her istekte en üstteki (seçili) modelden başlanır; kotası yenilenmemiş olanlar atlanır.
         val candidates = (listOf(model()) + FALLBACK_MODELS).distinct().filter { GeminiQuota.isAvailable(it, now) }
-        if (candidates.isEmpty()) throw AiException(QUOTA_MSG)
+        if (candidates.isEmpty()) throw AiException(QUOTA_MSG, outOfCredit = true)
+        if (GeminiQuota.billingBlocked()) throw AiException(BILLING_MSG, outOfCredit = true)
 
         var res: Http.Result? = null
         var usedModel = candidates.first()
@@ -70,7 +71,12 @@ class GeminiProvider(
             }
         }
         res!!
-        if (res.code == 429) throw AiException(QUOTA_MSG)
+        if (res.code == 429) throw AiException(QUOTA_MSG, outOfCredit = true)
+        if (res.code == 402) {
+            // Ön ödemeli bakiye bitti: bütün Gemini modelleri aynı hesabı kullandığı için model değiştirmek işe yaramaz.
+            GeminiQuota.markBilling()
+            throw AiException(BILLING_MSG, outOfCredit = true)
+        }
         if (res.code !in 200..299) throw AiException("Gemini hatası (${res.code}): ${errorMessage(res.body)}")
 
         val json = JSONObject(res.body)
@@ -186,6 +192,9 @@ class GeminiProvider(
             """{"thinkingBudget":0}""",
             null,
         )
+
+        const val BILLING_MSG = "Gemini hesabınızdaki ön ödemeli bakiye bitmiş efendim. Google AI Studio'dan bakiye yükleyin " +
+            "ya da Ayarlar'a Claude anahtarı ekleyin; o zaman kendiliğimden Claude'a geçerim. Telefon komutlarını yine de yapabilirim."
 
         const val QUOTA_MSG = "Gemini'nin bugünkü ücretsiz kotası doldu efendim. Kota her gün saat on civarında yenileniyor. " +
             "Beklemek istemezseniz Ayarlar'dan Claude'a geçebilir ya da Google AI Studio'da faturalandırmayı açabilirsiniz."

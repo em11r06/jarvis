@@ -29,6 +29,23 @@ class Agent(
         if (settings.provider == Settings.PROVIDER_CLAUDE) claude else gemini
 
     /**
+     * Seçili sağlayıcıya sorar; kotası/bakiyesi bittiyse ve diğerinin anahtarı varsa ona geçer
+     * (ör. Gemini bakiyesi bitince Claude). Konuşma geçmişi iki sağlayıcıda da çalışır.
+     */
+    private suspend fun complete(system: String, turns: List<Turn>, tools: List<ToolSpec>): AiReply {
+        val main = provider()
+        return try {
+            main.complete(system, turns, tools)
+        } catch (e: AiException) {
+            val other = if (main === gemini) claude.takeIf { settings.claudeKey.isNotBlank() }
+            else gemini.takeIf { settings.geminiKey.isNotBlank() && !GeminiQuota.billingBlocked() }
+            if (!e.outOfCredit || other == null) throw e
+            Log.w(TAG, "${main.id} kullanılamıyor, ${other.id} ile devam: ${e.message}")
+            other.complete(system, turns, tools)
+        }
+    }
+
+    /**
      * @param onToolUse araç çalışırken ekranda göstermek için (ör. "uygulama_ac")
      * @param onInterimText yapay zeka araç çağırırken bir şey söylerse (ör. "Hemen açıyorum")
      */
@@ -61,7 +78,7 @@ class Agent(
         onInterimText: suspend (String) -> Unit,
     ): String {
         repeat(MAX_STEPS) {
-            val reply = fixFakeCall(provider().complete(systemPrompt(), history.turns.toList(), tools).turn)
+            val reply = fixFakeCall(complete(systemPrompt(), history.turns.toList(), tools).turn)
             history.turns += reply
             history.save()
 
@@ -146,7 +163,7 @@ class Agent(
             }
         }
         try {
-            val summary = provider().complete(
+            val summary = complete(
                 "Aşağıdaki konuşmayı Türkçe, en fazla 10 cümlede özetle. Kullanıcı hakkında öğrenilen kalıcı bilgileri (isim, tercihler, planlar) mutlaka koru.",
                 listOf(Turn.User(transcript)),
                 emptyList(),
@@ -169,7 +186,7 @@ class Agent(
 
     /** Araçsız, tek seferlik soru (ör. konuşma tarzı analizi). */
     suspend fun oneShot(system: String, prompt: String): String =
-        provider().complete(system, listOf(Turn.User(prompt)), emptyList()).turn.text
+        complete(system, listOf(Turn.User(prompt)), emptyList()).turn.text
 
     companion object {
         private const val TAG = "JarvisAgent"

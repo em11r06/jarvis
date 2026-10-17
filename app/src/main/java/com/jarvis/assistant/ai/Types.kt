@@ -79,7 +79,8 @@ sealed class Turn {
 /** Sağlayıcının tek bir cevabı. */
 data class AiReply(val turn: Turn.Assistant)
 
-class AiException(message: String) : Exception(message)
+/** @param outOfCredit sağlayıcı kota/bakiye yüzünden cevap veremiyor (başka sağlayıcıya geçilebilir). */
+class AiException(message: String, val outOfCredit: Boolean = false) : Exception(message)
 
 /** Her yapay zeka sağlayıcısı bu arayüzü uygular. */
 interface AiProvider {

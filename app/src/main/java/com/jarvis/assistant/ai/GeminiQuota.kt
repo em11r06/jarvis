@@ -55,7 +55,15 @@ object GeminiQuota {
     }
 
     /** Yeni API anahtarı girilince eski anahtarın "kota doldu" bilgisi geçersizdir; hepsini sıfırla. */
+    /** Bakiye bittiyse (402) Gemini bir süre hiç denenmez; yükleme yapılınca 10 dk içinde kendiliğinden yeniden dener. */
+    @Volatile private var billingUntil = 0L
+
+    fun markBilling() { billingUntil = System.currentTimeMillis() + 10 * 60_000L }
+
+    fun billingBlocked() = System.currentTimeMillis() < billingUntil
+
     fun reset() {
+        billingUntil = 0L
         prefs?.edit()?.clear()?.apply()
     }
 

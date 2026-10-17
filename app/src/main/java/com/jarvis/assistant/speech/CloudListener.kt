@@ -129,6 +129,7 @@ class CloudListener(private val context: Context, private val settings: Settings
     private suspend fun transcribe(pcm: ByteArray): String? {
         val key = settings.geminiKey
         if (key.isBlank()) throw IllegalStateException("Gemini anahtarı yok")
+        if (GeminiQuota.billingBlocked()) throw IllegalStateException("Gemini bakiyesi bitti")
         val wav = wav(pcm)
         val prompt = buildString {
             append("Bu ses kaydında bir kişi telefonundaki Türkçe sesli asistana (adı Jarvis) bir şey söylüyor. ")
@@ -161,6 +162,7 @@ class CloudListener(private val context: Context, private val settings: Settings
             )
             when {
                 res.code == 429 -> { GeminiQuota.markExhausted(m, res.body); lastError = "kota"; continue }
+                res.code == 402 -> { GeminiQuota.markBilling(); throw IllegalStateException("Gemini bakiyesi bitti") }
                 res.code == 404 || res.code >= 500 -> { GeminiQuota.markUnavailable(m, 10 * 60_000L); lastError = "${res.code}"; continue }
                 res.code !in 200..299 -> throw IllegalStateException("Gemini ${res.code}: ${res.body.take(200)}")
             }

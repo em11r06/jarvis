@@ -179,7 +179,8 @@ class AssistantController(
      * hata olursa telefonun tanıyıcısı kullanılır.
      */
     private suspend fun listenOnce(timeout: Long, hints: List<String>): com.jarvis.assistant.speech.Heard? {
-        val cloud = settings.cloudStt && settings.geminiKey.isNotBlank() && Network.isOnline(context)
+        val cloud = settings.cloudStt && settings.geminiKey.isNotBlank() && Network.isOnline(context) &&
+            !com.jarvis.assistant.ai.GeminiQuota.billingBlocked()
         if (cloud) {
             cloudListener.hints = hints
             cloudListener.context_ = history.turns.takeLast(4).mapNotNull {
@@ -239,9 +240,9 @@ class AssistantController(
         } catch (e: Exception) {
             Log.w("Jarvis", "Agent hatası", e)
             if (e is kotlinx.coroutines.CancellationException) throw e
-            if (Network.isNetworkError(e)) {
-                // Bağlantı koptu: komutsa yine de yap.
-                offline.handle(text) ?: offlineChat(text) ?: OfflineBrain.NO_INTERNET
+            if (Network.isNetworkError(e) || (e as? com.jarvis.assistant.ai.AiException)?.outOfCredit == true) {
+                // Bağlantı koptu ya da yapay zekanın kotası/bakiyesi bitti: komutsa yine de yap.
+                offline.handle(text) ?: if (Network.isNetworkError(e)) (offlineChat(text) ?: OfflineBrain.NO_INTERNET) else (e.message ?: "")
             } else {
                 "Bir sorun çıktı efendim: ${e.message ?: "bilinmeyen hata"}"
             }
