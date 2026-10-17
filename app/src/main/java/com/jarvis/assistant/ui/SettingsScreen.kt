@@ -1,6 +1,12 @@
 package com.jarvis.assistant.ui
 
 import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.runtime.rememberCoroutineScope
+import com.jarvis.assistant.style.StyleLearner
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -63,6 +69,19 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
     var hasPrint by remember { mutableStateOf(s.voicePrint.isNotBlank()) }
     var ownNumber by remember { mutableStateOf(s.ownNumber) }
     var curtain by remember { mutableStateOf(s.curtainEnabled) }
+    val scope = rememberCoroutineScope()
+    var senders by remember { mutableStateOf(StyleLearner.senders(context)) }
+    var styleOwner by remember { mutableStateOf(s.styleOwner) }
+    var styleGuide by remember { mutableStateOf(s.styleGuide) }
+    var styleStatus by remember { mutableStateOf("") }
+    val pickChats = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) scope.launch {
+            val n = StyleLearner.import(context, uris)
+            senders = StyleLearner.senders(context)
+            if (styleOwner.isBlank()) styleOwner = senders.firstOrNull()?.first.orEmpty()
+            styleStatus = if (n == 0) "Dosyada mesaj bulunamadı. WhatsApp'tan 'Sohbeti dışa aktar' ile alınan .txt dosyası olmalı." else "$n mesaj yüklendi."
+        }
+    }
     var threshold by remember { mutableFloatStateOf(s.voiceThreshold) }
     var enrolling by remember { mutableStateOf(false) }
     var follow by remember { mutableFloatStateOf(s.followUpSeconds.toFloat()) }
@@ -250,6 +269,57 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
                 label = { Text("Kendi numaranız (kendinize attığınız WhatsApp mesajları için)") },
                 singleLine = true, modifier = Modifier.fillMaxWidth(),
             )
+
+            SectionTitle("Konuşma tarzım")
+            Text(
+                "WhatsApp'ta bir sohbette ⋮ > Diğer > Sohbeti dışa aktar > Medya olmadan deyip dosyayı buraya yükleyin " +
+                    "(ya da paylaş menüsünden Jarvis'i seçin). Jarvis sadece SİZİN mesajlarınızı analiz edip sizin gibi konuşur.",
+                fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+                Button(onClick = { pickChats.launch(arrayOf("text/plain", "application/zip", "*/*")) }) { Text("Sohbet yükle") }
+                if (senders.isNotEmpty()) OutlinedButton(onClick = {
+                    StyleLearner.clear(context)
+                    senders = emptyList()
+                    styleStatus = "Yüklenen sohbetler silindi."
+                }) { Text("Sohbetleri sil") }
+            }
+            if (senders.isNotEmpty()) {
+                Text("Hangisi sizsiniz?", fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.onSurface)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                ) {
+                    senders.take(8).forEach { (name, count) ->
+                        FilterChip(styleOwner == name, { styleOwner = name }, { Text("$name ($count)") })
+                    }
+                }
+                Button(
+                    onClick = {
+                        styleStatus = "Analiz ediliyor..."
+                        scope.launch {
+                            styleStatus = try {
+                                val g = StyleLearner.analyze(context, styleOwner)
+                                styleGuide = s.styleGuide
+                                if (g == styleGuide) "Konuşma tarzınız öğrenildi." else g
+                            } catch (e: Exception) {
+                                "Hata: ${e.message}"
+                            }
+                        }
+                    },
+                    enabled = styleOwner.isNotBlank(),
+                    modifier = Modifier.padding(top = 6.dp),
+                ) { Text("Tarzımı analiz et") }
+            }
+            if (styleStatus.isNotBlank()) Text(styleStatus, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (styleGuide.isNotBlank()) {
+                OutlinedTextField(
+                    styleGuide, { styleGuide = it; s.styleGuide = it },
+                    label = { Text("Konuşma tarzı rehberi (düzenleyebilirsiniz)") },
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                )
+                TextButton(onClick = { styleGuide = ""; s.styleGuide = "" }) { Text("Tarzı unut (normal Jarvis)") }
+            }
 
             SectionTitle("Diğer")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

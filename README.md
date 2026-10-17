@@ -129,6 +129,19 @@ Bu sırada Jarvis ekranı "Jarvis çalışıyor…" perdesiyle örter (erişileb
 iş bitince perdeyi kaldırıp kullanıcıyı kaldığı ekrana döndürür. Ayarlar > Mesajlar'dan kapatılabilir.
 Spotify'da şarkı başlatınca da kullanıcı kaldığı ekrana döner. Ekran kilitliyken ekranda yapılan işler mümkün değildir.
 
+### İnternetsiz kullanım
+İnternet yoksa (ya da bağlantı koparsa) Jarvis telefon komutlarını yapay zekaya sormadan, telefonda anlar:
+alarm, zamanlayıcı, fener, ses, müzik kontrolü (durdur/sonraki/önceki/devam), uygulama açma, arama ve SMS (onaylı), saat ve pil.
+Ses tanıma çevrimdışı Türkçe modeli tercih eder (Google sesle yazma > Çevrimdışı konuşma tanıma > Türkçe indirili olmalı),
+uyandırma zaten çevrimdışıdır, ElevenLabs yerine telefonun sesi kullanılır. İnternetsiz sohbet için telefonda çalışan
+yapay zeka (Gemini Nano) desteği planlanıyor.
+
+### Konuşma tarzım
+WhatsApp'ta sohbet > ⋮ > Diğer > **Sohbeti dışa aktar** > **Medya olmadan** > paylaş menüsünden **Jarvis**
+(ya da Ayarlar > Konuşma tarzım > Sohbet yükle). Birkaç sohbet yükle, "Hangisi sizsiniz?" altından kendi adını seç,
+**Tarzımı analiz et** de. Yapay zekaya **sadece senin mesajların** gönderilir; çıkan rehber Ayarlar'da düzenlenebilir
+ve Jarvis seninle o tarzda konuşur. Yüklenen sohbetler sadece telefonda saklanır, istendiğinde silinir.
+
 ## 5. Kullanım örnekleri
 
 - "Jarvis... nasılsın?" (sohbet)

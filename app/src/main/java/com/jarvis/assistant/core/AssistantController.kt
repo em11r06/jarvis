@@ -38,7 +38,8 @@ class AssistantController(
     val history: HistoryStore,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    private val agent = Agent(context, settings, history)
+    val agent = Agent(context, settings, history)
+    private val offline = OfflineBrain(context)
     val speaker = Speaker(context, settings)
     private val listener = SpeechListener(context)
     private val busy = Mutex()
@@ -142,6 +143,14 @@ class AssistantController(
         addBubble(ChatBubble(true, text))
         _state.value = AssistantState.THINKING
         val answer = try {
+            // İnternet yoksa telefon komutlarını çevrimdışı beyinle yap.
+            if (!Network.isOnline(context)) {
+                val reply = offline.handle(text) ?: OfflineBrain.NO_INTERNET
+                history.turns += Turn.User(text)
+                history.turns += Turn.Assistant(reply, emptyList())
+                history.save()
+                return finish(reply)
+            }
             agent.ask(
                 text,
                 onToolUse = { name -> _partial.value = "⚙ $name" },
@@ -155,8 +164,17 @@ class AssistantController(
         } catch (e: Exception) {
             Log.w("Jarvis", "Agent hatası", e)
             if (e is kotlinx.coroutines.CancellationException) throw e
-            "Bir sorun çıktı efendim: ${e.message ?: "bilinmeyen hata"}"
+            if (Network.isNetworkError(e)) {
+                // Bağlantı koptu: komutsa yine de yap.
+                offline.handle(text) ?: OfflineBrain.NO_INTERNET
+            } else {
+                "Bir sorun çıktı efendim: ${e.message ?: "bilinmeyen hata"}"
+            }
         }
+        finish(answer)
+    }
+
+    private suspend fun finish(answer: String) {
         _partial.value = ""
         addBubble(ChatBubble(false, answer))
         _state.value = AssistantState.SPEAKING

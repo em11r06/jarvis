@@ -76,6 +76,14 @@
                 <action android:name="android.intent.action.VOICE_COMMAND" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
+            <!-- WhatsApp "Sohbeti dışa aktar" dosyası paylaşılınca konuşma tarzı için içe aktar -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="application/zip" />
+            </intent-filter>
         </activity>
 
         <service

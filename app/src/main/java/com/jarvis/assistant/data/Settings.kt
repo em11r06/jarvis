@@ -55,6 +55,11 @@ class Settings(context: Context) {
     /** Ekranda yapılan işlerde (WhatsApp, sohbet okuma...) üstte "Jarvis çalışıyor" perdesi göster. */
     var curtainEnabled by bool("curtain_enabled", true)
 
+    /** Kullanıcının sohbetlerinden çıkarılan konuşma tarzı rehberi. */
+    var styleGuide by str("style_guide", "")
+    /** Sohbet dökümlerinde kullanıcının göründüğü ad. */
+    var styleOwner by str("style_owner", "")
+
     var setupDone by bool("setup_done", false)
 
     private fun str(key: String, def: String) = object : ReadWriteProperty<Any?, String> {

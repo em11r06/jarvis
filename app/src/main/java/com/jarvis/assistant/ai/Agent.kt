@@ -157,8 +157,16 @@ class Agent(
     private fun systemPrompt(): String {
         val now = SimpleDateFormat("d MMMM yyyy EEEE HH:mm", Locale("tr", "TR")).format(Date())
         val summary = if (history.summary.isNotBlank()) "\n\nÖnceki konuşmaların özeti: ${history.summary}" else ""
-        return SYSTEM_PROMPT + "\n\nŞu an: $now." + summary
+        val style = settings.styleGuide.takeIf { it.isNotBlank() }?.let {
+            "\n\nKullanıcının kendi konuşma tarzı aşağıda. Onunla bu tarzda, onun gibi konuş (kelimeleri, hitapları, enerjisi). " +
+                "Ama sesli okunacağı için düzgün Türkçe karakterlerle yaz, yazım hatalarını taklit etme:\n$it"
+        }.orEmpty()
+        return SYSTEM_PROMPT + "\n\nŞu an: $now." + summary + style
     }
+
+    /** Araçsız, tek seferlik soru (ör. konuşma tarzı analizi). */
+    suspend fun oneShot(system: String, prompt: String): String =
+        provider().complete(system, listOf(Turn.User(prompt)), emptyList()).turn.text
 
     companion object {
         private const val TAG = "JarvisAgent"

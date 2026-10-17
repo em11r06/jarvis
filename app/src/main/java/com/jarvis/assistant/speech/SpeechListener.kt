@@ -72,6 +72,10 @@ class SpeechListener(private val context: Context) {
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "tr-TR")
                     putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                     putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                    // İnternet yoksa telefondaki çevrimdışı Türkçe modeli kullan.
+                    if (!com.jarvis.assistant.core.Network.isOnline(context)) {
+                        putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+                    }
                     // Sustuktan sonra daha kısa bekle (tanıyıcı destekliyorsa).
                     putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 900L)
                     putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 700L)

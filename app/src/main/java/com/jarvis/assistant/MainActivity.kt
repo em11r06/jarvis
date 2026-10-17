@@ -17,6 +17,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import com.jarvis.assistant.ui.ChatScreen
 import com.jarvis.assistant.ui.SettingsScreen
 import com.jarvis.assistant.ui.SetupScreen
@@ -104,6 +106,20 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(intent: Intent?) {
         if (intent?.getBooleanExtra(Updater.EXTRA_INSTALL, false) == true) Updater.install(this)
+        // Paylaşılan sohbet dökümü: konuşma tarzı için içe aktar.
+        if (intent?.action == Intent.ACTION_SEND || intent?.action == Intent.ACTION_SEND_MULTIPLE) {
+            @Suppress("DEPRECATION")
+            val uris = if (intent.action == Intent.ACTION_SEND_MULTIPLE) {
+                intent.getParcelableArrayListExtra<android.net.Uri>(Intent.EXTRA_STREAM).orEmpty()
+            } else {
+                listOfNotNull(intent.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM))
+            }
+            if (uris.isNotEmpty()) lifecycleScope.launch {
+                val n = com.jarvis.assistant.style.StyleLearner.import(this@MainActivity, uris)
+                val msg = if (n == 0) "Dosyada sohbet bulunamadı." else "$n mesaj yüklendi. Ayarlar > Konuşma tarzım'dan analiz edin."
+                android.widget.Toast.makeText(this@MainActivity, msg, android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
         // Bildirimden "başlatmak için dokun" ile gelindiyse uyandırma servisini başlat.
         if (intent?.getBooleanExtra(WakeWordService.EXTRA_START_WAKE, false) == true) {
             WakeWordService.start(this)

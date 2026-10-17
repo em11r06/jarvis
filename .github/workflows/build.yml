@@ -106,6 +106,14 @@ jobs:
               print("YT_VIDEO", m.group(1), t and t.group(1))
           PY
 
+      # Telefonda çalışan yapay zeka (Gemini Nano / ML Kit GenAI) kütüphane sürümlerini listeler (sonraki adım için bilgi).
+      - name: Gemini Nano kütüphane sürümleri
+        continue-on-error: true
+        run: |
+          for a in com/google/mlkit/genai-prompt com/google/mlkit/genai-common com/google/ai/edge/aicore/aicore; do
+            echo "== $a"; curl -sS -m 15 "https://dl.google.com/dl/android/maven2/$a/maven-metadata.xml" | grep -oE '<version>[^<]+' | tail -5
+          done
+
       - name: APK derle
         env:
           JARVIS_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
