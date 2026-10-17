@@ -109,18 +109,40 @@ class WhatsappGonderTool : Tool {
         var sent = false
         for (i in 0 until 27) {
             delay(300)
-            val btn = acc.findById("$pkg:id/send") ?: acc.findByText("Gönder") ?: acc.findByText("Send")
-            if (btn != null && btn.packageName?.toString() == pkg && acc.click(btn)) {
-                sent = true
-                break
+            if (pressSend(acc, pkg)) {
+                delay(800)
+                // Kutu boşaldıysa mesaj gitmiştir.
+                val entry = acc.findById("$pkg:id/entry")?.text?.toString().orEmpty()
+                if (!entry.contains(text.take(15))) {
+                    sent = true
+                    break
+                }
             }
         }
         if (!sent) return "WhatsApp açıldı ama gönder düğmesini bulamadım. ${contact.name} WhatsApp kullanmıyor olabilir; mesaj kutuda yazılı duruyor."
-        delay(700)
         // Kullanıcıyı önceki uygulamaya geri götür.
         val back = previous?.let { ctx.packageManager.getLaunchIntentForPackage(it) }
         if (back == null || !Launcher.start(ctx, back)) acc.global(AccessibilityService.GLOBAL_ACTION_HOME)
         return "${contact.name} kişisine WhatsApp'tan gönderildi."
+    }
+
+    /**
+     * WhatsApp'ın yeşil gönder düğmesine basar: önce iç kimliğiyle, sonra "Gönder" etiketiyle,
+     * o da olmazsa mesaj kutusunun hemen sağındaki konuma dokunarak.
+     */
+    private suspend fun pressSend(acc: JarvisAccessibilityService, pkg: String): Boolean {
+        val entry = acc.findById("$pkg:id/entry") ?: return false
+        if (entry.text.isNullOrBlank()) return false
+        val byId = acc.findById("$pkg:id/send")
+        if (byId != null && acc.click(byId)) return true
+        val byLabel = (acc.findByText("Gönder") ?: acc.findByText("Send"))
+            ?.takeIf { it.packageName?.toString() == pkg && !it.isEditable && it.text.isNullOrBlank() }
+        if (byLabel != null && acc.click(byLabel)) return true
+        val r = android.graphics.Rect()
+        entry.getBoundsInScreen(r)
+        val screenW = acc.resources.displayMetrics.widthPixels
+        if (r.isEmpty || r.right >= screenW) return false
+        return acc.tap((r.right + screenW) / 2f, r.exactCenterY())
     }
 
     companion object {
@@ -185,7 +207,20 @@ class SohbetiOkuTool : Tool {
         val collected = mutableListOf<String>()
         var stale = 0
         for (round in 0 until 15) {
-            val visible = acc.nodesById("$pkg:id/message_text").mapNotNull { it.text?.toString()?.takeIf { t -> t.isNotBlank() } }
+            // Kesik uzun mesajları ("Devamını okuyun") önce aç.
+            var expanded = false
+            for (n in acc.nodesById("$pkg:id/message_text")) {
+                if (acc.expandReadMore(n)) expanded = true
+            }
+            if (expanded) delay(500)
+            val visible = acc.nodesById("$pkg:id/message_text").mapNotNull { n ->
+                var t = n.text?.toString() ?: return@mapNotNull null
+                // Hâlâ kesikse "… Devamını okuyun" kısmını temizle.
+                JarvisAccessibilityService.READ_MORE.firstOrNull { t.contains(it, ignoreCase = true) }?.let { m ->
+                    t = t.replace(m, "", ignoreCase = true).trim().trimEnd('…').trimEnd('.').trim() + " (devamı okunamadı)"
+                }
+                t.trim().takeIf { it.isNotBlank() }
+            }
             val before = collected.size
             mergeOlder(collected, visible)
             if (collected.size >= want) break

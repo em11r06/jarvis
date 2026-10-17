@@ -189,6 +189,33 @@ class JarvisAccessibilityService : AccessibilityService() {
     /** Ön plandaki uygulamanın paket adı (Jarvis değilse). */
     fun foregroundPackage(): String? = rootInActiveWindow?.packageName?.toString()
 
+    /**
+     * Uzun mesajın sonundaki "Devamını okuyun / Read more" bağlantısına basar.
+     * Önce metindeki tıklanabilir bağlantıyı doğrudan çalıştırır, olmazsa son satıra dokunur.
+     */
+    suspend fun expandReadMore(node: AccessibilityNodeInfo): Boolean {
+        val text = node.text ?: return false
+        val str = text.toString()
+        val marker = READ_MORE.firstOrNull { str.contains(it, ignoreCase = true) } ?: return false
+        val spanned = text as? android.text.Spanned
+        val span = spanned?.getSpans(0, text.length, android.text.style.ClickableSpan::class.java)
+            ?.firstOrNull { sp ->
+                val start = spanned.getSpanStart(sp)
+                val end = spanned.getSpanEnd(sp)
+                start >= 0 && end <= str.length && str.substring(start, end).contains(marker.take(6), ignoreCase = true)
+            }
+        if (span != null) {
+            val ok = runCatching { span.onClick(android.view.View(this)) }.isSuccess
+            if (ok) return true
+        }
+        // Yedek: bağlantı son satırın sonundadır; o bölgeye dokun.
+        val r = Rect()
+        node.getBoundsInScreen(r)
+        if (r.isEmpty) return false
+        val line = 20f * resources.displayMetrics.density
+        return tap(r.left + r.width() * 0.45f, r.bottom - line * 0.6f)
+    }
+
     /** Verilen paketin penceresinde, kimliği (viewId) bu olan görünür öğeler; ekrandaki sırasıyla. */
     fun nodesById(viewId: String): List<AccessibilityNodeInfo> =
         roots().flatMap { it.second.findAccessibilityNodeInfosByViewId(viewId) }.filter { it.isVisibleToUser }
@@ -212,6 +239,9 @@ class JarvisAccessibilityService : AccessibilityService() {
         roots().firstNotNullOfOrNull { it.second.findAccessibilityNodeInfosByViewId(viewId).firstOrNull { n -> n.isVisibleToUser } }
 
     companion object {
+        /** Kesik mesajların sonundaki "devamını oku" yazıları. */
+        val READ_MORE = listOf("Devamını okuyun", "Devamını oku", "Read more")
+
         @Volatile
         var instance: JarvisAccessibilityService? = null
             private set
