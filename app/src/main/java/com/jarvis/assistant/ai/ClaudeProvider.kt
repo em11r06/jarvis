@@ -75,6 +75,15 @@ class ClaudeProvider(
                     lastWasNative = t.rawProvider == id && t.raw != null
                     if (lastWasNative) {
                         add("assistant", JSONArray(t.raw!!.getJSONArray("content").toString()))
+                    } else if (t.calls.isNotEmpty()) {
+                        // Başka sağlayıcıdan gelen araç çağrısını gerçek tool_use olarak ver (taklit edilmesin).
+                        val blocks = JSONArray()
+                        if (t.text.isNotBlank()) blocks.put(JSONObject().put("type", "text").put("text", t.text))
+                        t.calls.forEach {
+                            blocks.put(JSONObject().put("type", "tool_use").put("id", safeId(it.id)).put("name", it.name).put("input", it.args))
+                        }
+                        add("assistant", blocks)
+                        lastWasNative = true
                     } else {
                         add("assistant", textBlock(flattenAssistant(t)))
                     }
@@ -83,7 +92,7 @@ class ClaudeProvider(
                     if (lastWasNative) {
                         val blocks = JSONArray()
                         t.results.forEach {
-                            blocks.put(JSONObject().put("type", "tool_result").put("tool_use_id", it.callId).put("content", it.content))
+                            blocks.put(JSONObject().put("type", "tool_result").put("tool_use_id", safeId(it.callId)).put("content", it.content))
                         }
                         add("user", blocks)
                     } else {
@@ -96,4 +105,7 @@ class ClaudeProvider(
         while (msgs.isNotEmpty() && msgs.first().first != "user") msgs.removeAt(0)
         return JSONArray().apply { msgs.forEach { put(JSONObject().put("role", it.first).put("content", it.second)) } }
     }
+
+    /** Claude araç kimliklerinde sadece harf, rakam, _ ve - kabul ediyor. */
+    private fun safeId(id: String) = id.replace(Regex("[^a-zA-Z0-9_-]"), "_").ifBlank { "call" }
 }

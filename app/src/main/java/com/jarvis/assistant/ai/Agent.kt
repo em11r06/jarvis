@@ -46,7 +46,7 @@ class Agent(
         val tools = ToolRegistry.all.map { it.spec() }
 
         repeat(MAX_STEPS) {
-            val reply = provider().complete(systemPrompt(), history.turns.toList(), tools).turn
+            val reply = fixFakeCall(provider().complete(systemPrompt(), history.turns.toList(), tools).turn)
             history.turns += reply
             history.save()
 
@@ -79,6 +79,26 @@ class Agent(
             history.save()
         }
         return "Bu iş beklediğimden uzun sürdü efendim, burada durdum."
+    }
+
+    /**
+     * Bazı modeller aracı çağırmak yerine "[Araç kullanıldı: uygulama_ac({...})]" diye yazıyor.
+     * Böyle bir metin gelirse onu gerçek bir araç çağrısına çeviririz.
+     */
+    private fun fixFakeCall(reply: Turn.Assistant): Turn.Assistant {
+        if (reply.calls.isNotEmpty()) return reply
+        val matches = FAKE_CALL.findAll(reply.text).toList()
+        if (matches.isEmpty()) return reply
+        val calls = matches.mapIndexedNotNull { i, m ->
+            val name = m.groupValues[1]
+            if (ToolRegistry.find(name) == null) return@mapIndexedNotNull null
+            val args = runCatching { org.json.JSONObject(m.groupValues[2].ifBlank { "{}" }) }.getOrDefault(org.json.JSONObject())
+            ToolCall("local_${System.nanoTime()}_$i", name, args)
+        }
+        val text = FAKE_CALL.replace(reply.text, "").trim()
+        if (calls.isEmpty()) return reply.copy(text = text)
+        Log.w(TAG, "Sahte araç çağrısı düzeltildi: ${calls.map { it.name }}")
+        return Turn.Assistant(text, calls, null, null)
     }
 
     /** Geçmiş uzayınca eski kısmı özetleyip kısaltır (maliyet şişmesin). */

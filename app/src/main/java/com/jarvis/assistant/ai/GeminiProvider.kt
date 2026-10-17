@@ -45,7 +45,7 @@ class GeminiProvider(
             usedModel = m
             val body = JSONObject()
                 .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system))))
-                .put("contents", buildContents(history, m))
+                .put("contents", buildContents(history, m, dummySignature = true))
             toolsJson?.let { body.put("tools", it) }
             val url = "https://generativelanguage.googleapis.com/v1beta/models/$m:generateContent"
             // Sesli asistan için hız önemli: en düşük düşünme seviyesi. Model desteklemezse
@@ -54,6 +54,11 @@ class GeminiProvider(
                 if (thinking != null) body.put("generationConfig", JSONObject().put("thinkingConfig", JSONObject(thinking)))
                 else body.remove("generationConfig")
                 res = Http.postJson(url, body.toString(), headers)
+                if (res.code == 400 && res.body.contains("signature", ignoreCase = true)) {
+                    // Sahte imza kabul edilmezse eski araç adımlarını sade metinle ver.
+                    body.put("contents", buildContents(history, m, dummySignature = false))
+                    res = Http.postJson(url, body.toString(), headers)
+                }
                 if (!(res.code == 400 && res.body.contains("thinking", ignoreCase = true))) break
             }
             val code = res!!.code
@@ -97,7 +102,7 @@ class GeminiProvider(
         return AiReply(Turn.Assistant(text.toString().trim(), calls, content, "$id:$usedModel"))
     }
 
-    private fun buildContents(history: List<Turn>, model: String): JSONArray {
+    private fun buildContents(history: List<Turn>, model: String, dummySignature: Boolean): JSONArray {
         val out = JSONArray()
         var lastWasNative = false
         for (t in history) {
@@ -107,6 +112,21 @@ class GeminiProvider(
                     lastWasNative = t.rawProvider == "$id:$model" && t.raw != null
                     if (lastWasNative) {
                         out.put(t.raw)
+                    } else if (t.calls.isNotEmpty() && dummySignature) {
+                        // Başka model/sağlayıcıdan gelen araç çağrısını gerçek functionCall olarak ver.
+                        // Düz metin verilirse model o metni taklit edip aracı çağırmadan "yaptım" yazıyor.
+                        // İmza bu modele ait olmadığı için Google'ın belgelediği sahte imza kullanılır.
+                        val parts = JSONArray()
+                        if (t.text.isNotBlank()) parts.put(JSONObject().put("text", t.text))
+                        t.calls.forEachIndexed { i, c ->
+                            val fc = JSONObject().put("name", c.name).put("args", c.args)
+                            if (!c.id.startsWith("local_")) fc.put("id", c.id)
+                            val part = JSONObject().put("functionCall", fc)
+                            if (i == 0) part.put("thoughtSignature", DUMMY_SIGNATURE)
+                            parts.put(part)
+                        }
+                        out.put(JSONObject().put("role", "model").put("parts", parts))
+                        lastWasNative = true
                     } else {
                         out.put(textContent("model", flattenAssistant(t)))
                     }
@@ -142,6 +162,9 @@ class GeminiProvider(
             "gemini-2.5-flash-lite",
         )
 
+        /** Google'ın, başka modelden aktarılan çağrılar için belgelediği imza doğrulamasını atlama değeri. */
+        private const val DUMMY_SIGNATURE = "skip_thought_signature_validator"
+
         private val THINKING_OPTIONS = listOf(
             """{"thinkingLevel":"minimal"}""",
             """{"thinkingLevel":"low"}""",
@@ -162,10 +185,13 @@ class GeminiProvider(
 
 /** Başka sağlayıcıdan kalan araç adımlarını düz metne çevirir. */
 internal fun flattenAssistant(t: Turn.Assistant): String {
+    // Sadece söylenen metni ver; araç kalıbı yazılırsa model onu taklit edip aracı çağırmıyor.
     if (t.calls.isEmpty()) return t.text
-    val names = t.calls.joinToString { "${it.name}(${it.args})" }
-    return (t.text + "\n[Araç kullanıldı: $names]").trim()
+    return t.text.ifBlank { "Tamam, hallediyorum." }
 }
 
 internal fun flattenTools(t: Turn.Tools): String =
-    "[Araç sonuçları]\n" + t.results.joinToString("\n") { "${it.name}: ${it.content.take(1500)}" }
+    "(Bilgi: az önceki işlemin sonucu: " + t.results.joinToString("; ") { it.content.take(800) } + ")"
+
+/** Zayıf modellerin araç çağırmak yerine düz metin olarak yazdığı sahte çağrı kalıbı. */
+internal val FAKE_CALL = Regex("""\[\s*Araç kullanıldı:\s*([a-z_]+)\s*\(?\s*(\{.*?\})?\s*\)?\s*]""", RegexOption.DOT_MATCHES_ALL)
