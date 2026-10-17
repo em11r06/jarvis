@@ -50,6 +50,22 @@ class Speaker(private val context: Context, private val settings: Settings) {
         .setAudioAttributes(attrs)
         .build()
 
+    private var focusHolds = 0
+
+    /**
+     * Diğer uygulamaların sesini (müzik, video) kısar. Oturum boyunca da tutulabilir;
+     * herkes bıraktığında ses eski hâline döner.
+     */
+    @Synchronized
+    fun acquireFocus() {
+        if (focusHolds++ == 0) audio.requestAudioFocus(focus)
+    }
+
+    @Synchronized
+    fun releaseFocus() {
+        if (focusHolds > 0 && --focusHolds == 0) audio.abandonAudioFocusRequest(focus)
+    }
+
     /** Seçili motorla TTS'i hazırlar; motor değiştiyse yeniden oluşturur. */
     private suspend fun ensureTts(): TextToSpeech? = withContext(Dispatchers.Main) {
         val wanted = settings.ttsEngine.ifBlank { null }
@@ -88,7 +104,7 @@ class Speaker(private val context: Context, private val settings: Settings) {
     /** Metni sesli okur ve okuma bitene kadar bekler. */
     suspend fun speak(text: String) {
         if (text.isBlank()) return
-        audio.requestAudioFocus(focus)
+        acquireFocus()
         try {
             if (settings.ttsMode == Settings.TTS_ELEVEN && settings.elevenKey.isNotBlank() && settings.elevenVoiceId.isNotBlank()) {
                 val spoken = speakElevenStreamed(text, settings.elevenVoiceId)
@@ -101,7 +117,7 @@ class Speaker(private val context: Context, private val settings: Settings) {
             }
             speakAndroid(text, settings.ttsVoice, settings.ttsRate, settings.ttsPitch)
         } finally {
-            audio.abandonAudioFocusRequest(focus)
+            releaseFocus()
         }
     }
 
@@ -154,7 +170,7 @@ class Speaker(private val context: Context, private val settings: Settings) {
      * indirilip telefonda saklanır; sonraki seferlerde internet beklemeden anında çalar.
      */
     suspend fun speakShort(text: String) {
-        audio.requestAudioFocus(focus)
+        acquireFocus()
         try {
             if (settings.ttsMode == Settings.TTS_ELEVEN && settings.elevenKey.isNotBlank() && settings.elevenVoiceId.isNotBlank()) {
                 val ok = runCatching {
@@ -166,7 +182,7 @@ class Speaker(private val context: Context, private val settings: Settings) {
             }
             speakAndroid(text, settings.ttsVoice, settings.ttsRate, settings.ttsPitch)
         } finally {
-            audio.abandonAudioFocusRequest(focus)
+            releaseFocus()
         }
     }
 

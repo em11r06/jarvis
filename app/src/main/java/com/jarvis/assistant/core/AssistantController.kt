@@ -109,6 +109,8 @@ class AssistantController(
         if (busy.isLocked) return
         beforeListen?.invoke()
         busy.withLock {
+            // Dinlerken müziği/videoyu kıs ki kullanıcıyı net duyalım.
+            speaker.acquireFocus()
             try {
                 var timeout = FIRST_LISTEN_MS
                 while (true) {
@@ -129,6 +131,7 @@ class AssistantController(
                 _partial.value = ""
                 _state.value = AssistantState.IDLE
                 listener.release()
+                speaker.releaseFocus()
                 afterSession?.invoke()
             }
         }

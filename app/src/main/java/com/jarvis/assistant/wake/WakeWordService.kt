@@ -115,6 +115,9 @@ class WakeWordService : Service() {
         if (inSession) return
         inSession = true
         pauseDetection()
+        val speaker = JarvisApp.instance.assistant.speaker
+        // Müziği/videoyu hemen kıs; oturum bitene kadar kısık kalsın.
+        speaker.acquireFocus()
         if (JarvisApp.instance.settings.wakeGreeting) {
             // "Buyrun efendim" gibi kısa bir cevapla duyduğunu belli et.
             JarvisApp.instance.assistant.speaker.speakShort(WAKE_REPLIES.random())
@@ -130,6 +133,7 @@ class WakeWordService : Service() {
         try {
             JarvisApp.instance.assistant.voiceSession()
         } finally {
+            speaker.releaseFocus()
             inSession = false
             resumeDetection()
         }

@@ -173,6 +173,9 @@ Kararsız kaldığım yerlerde şunları seçtim:
   Porcupine'den biraz daha fazla pil harcar. Yanlış uyanmayı azaltmak için kelime güven puanı kontrol edilir (müzik çalarken daha sıkı)
   ve kullanıcı sesini tanıttıysa Vosk ses izi modeliyle (vosk-model-spk-0.4) konuşanın o olup olmadığına bakılır.
   Eşik, kayıt sırasındaki örneklerin birbirine benzerliğinden kişiye göre hesaplanır. Picovoice anahtarı girilirse otomatik olarak Porcupine (hassasiyet 0.65) kullanılır.
+- **Arka planda ses varken:** Uyandırma mikrofonu `VOICE_COMMUNICATION` kaynağıyla, yankı engelleme (AEC) ve gürültü azaltma
+  açık okunur; telefonun kendi çaldığı müzik/video büyük ölçüde mikrofondan çıkarılır. "Jarvis" deyince diğer uygulamaların
+  sesi oturum boyunca kısılır (audio focus, duck) ve konuşma bitince geri gelir.
 - **Spotify:** `MEDIA_PLAY_FROM_SEARCH` intent'i. Spotify bazen sadece aramayı açıp çalmıyor; 3,5 sn sonra müzik çalmıyorsa "oynat" tuşu gönderiliyor.
 - **Ekran görüntüsü:** Erişilebilirlik servisinin `GLOBAL_ACTION_TAKE_SCREENSHOT` işlemi (sistem gibi galeriye kaydeder).
 - **Dokun/yaz/kaydır sonrası:** Araç, işlemden sonra ekranın yeni hâlini otomatik döndürür; yapay zeka bir sonraki adımı daha az turda seçer.

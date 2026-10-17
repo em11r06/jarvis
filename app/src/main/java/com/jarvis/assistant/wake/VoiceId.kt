@@ -14,8 +14,6 @@ import org.json.JSONObject
 import org.vosk.Model
 import org.vosk.Recognizer
 import org.vosk.SpeakerModel
-import org.vosk.android.RecognitionListener
-import org.vosk.android.SpeechService
 import org.vosk.android.StorageService
 import java.io.File
 import kotlin.coroutines.resume
@@ -133,30 +131,106 @@ object VoiceId {
         val (model, speaker) = VoskModels.load(context)
         if (speaker == null) return null
         val rec = VoskModels.recognizer(model, speaker)
-        val service = withContext(Dispatchers.Main) { SpeechService(rec, VoskModels.SAMPLE_RATE) }
+        var loop: MicLoop? = null
         try {
             return withTimeoutOrNull(timeoutMs) {
                 suspendCancellableCoroutine { cont ->
-                    service.startListening(object : RecognitionListener {
-                        override fun onPartialResult(hypothesis: String?) {}
-                        override fun onResult(hypothesis: String?) {
-                            val hit = parse(hypothesis) ?: return
-                            if (hit.voice != null && cont.isActive) cont.resume(hit.voice)
-                        }
-                        override fun onFinalResult(hypothesis: String?) {}
-                        override fun onError(exception: Exception?) { if (cont.isActive) cont.resume(null) }
-                        override fun onTimeout() { if (cont.isActive) cont.resume(null) }
-                    })
+                    loop = MicLoop(
+                        rec,
+                        onResult = { json ->
+                            val hit = parse(json)
+                            if (hit?.voice != null && cont.isActive) cont.resume(hit.voice)
+                        },
+                        onError = { if (cont.isActive) cont.resume(null) },
+                    )
+                    try {
+                        loop!!.start()
+                    } catch (e: Exception) {
+                        if (cont.isActive) cont.resume(null)
+                    }
                 }
             }
         } finally {
-            withContext(Dispatchers.Main) {
-                runCatching { service.cancel() }
-                runCatching { service.shutdown() }
-            }
+            withContext(Dispatchers.IO) { loop?.stop() }
             runCatching { rec.close() }
         }
     }
 
     private const val TAG = "JarvisVoice"
+}
+
+/**
+ * Mikrofonu okuyup Vosk tanıyıcısına veren döngü. Vosk'un hazır SpeechService'i yerine bunu
+ * kullanıyoruz çünkü yankı engelleme (AEC) ve gürültü azaltma ekleyebiliyoruz: telefonun
+ * kendi çaldığı müzik/video mikrofondan çıkarılır, kullanıcının sesi daha net duyulur.
+ * Ses tanıtma kaydı da aynı yoldan geçer ki ses izi aynı koşullarda alınsın.
+ */
+class MicLoop(
+    private val recognizer: Recognizer,
+    private val onResult: (String) -> Unit,
+    private val onError: (String) -> Unit,
+) {
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    @Volatile private var running = false
+    private var thread: Thread? = null
+    private var record: android.media.AudioRecord? = null
+    private var aec: android.media.audiofx.AcousticEchoCanceler? = null
+    private var ns: android.media.audiofx.NoiseSuppressor? = null
+
+    @android.annotation.SuppressLint("MissingPermission")
+    fun start() {
+        if (running) return
+        val rate = VoskModels.SAMPLE_RATE.toInt()
+        val min = android.media.AudioRecord.getMinBufferSize(
+            rate, android.media.AudioFormat.CHANNEL_IN_MONO, android.media.AudioFormat.ENCODING_PCM_16BIT,
+        )
+        val chunk = rate / 5 // 0,2 saniyelik parçalar
+        val r = android.media.AudioRecord(
+            // VOICE_COMMUNICATION: telefonun yankı engelleme ve gürültü azaltma işlemini açar.
+            android.media.MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+            rate, android.media.AudioFormat.CHANNEL_IN_MONO, android.media.AudioFormat.ENCODING_PCM_16BIT,
+            maxOf(min, chunk * 2 * 4),
+        )
+        if (r.state != android.media.AudioRecord.STATE_INITIALIZED) {
+            r.release()
+            throw java.io.IOException("Mikrofon açılamadı (başka uygulama kullanıyor olabilir).")
+        }
+        record = r
+        if (android.media.audiofx.AcousticEchoCanceler.isAvailable()) {
+            aec = runCatching { android.media.audiofx.AcousticEchoCanceler.create(r.audioSessionId)?.apply { enabled = true } }.getOrNull()
+        }
+        if (android.media.audiofx.NoiseSuppressor.isAvailable()) {
+            ns = runCatching { android.media.audiofx.NoiseSuppressor.create(r.audioSessionId)?.apply { enabled = true } }.getOrNull()
+        }
+        running = true
+        r.startRecording()
+        thread = Thread({
+            val buf = ShortArray(chunk)
+            try {
+                while (running) {
+                    val n = r.read(buf, 0, buf.size)
+                    if (n <= 0) continue
+                    if (recognizer.acceptWaveForm(buf, n)) {
+                        val res = recognizer.result
+                        main.post { if (running) onResult(res) }
+                    }
+                }
+            } catch (e: Exception) {
+                main.post { onError(e.message ?: "mikrofon hatası") }
+            }
+        }, "jarvis-mic").apply { start() }
+    }
+
+    fun stop() {
+        running = false
+        runCatching { thread?.join(800) }
+        thread = null
+        runCatching { record?.stop() }
+        runCatching { record?.release() }
+        record = null
+        runCatching { aec?.release() }
+        runCatching { ns?.release() }
+        aec = null
+        ns = null
+    }
 }

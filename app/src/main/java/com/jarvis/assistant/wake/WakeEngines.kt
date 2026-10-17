@@ -12,8 +12,6 @@ import kotlinx.coroutines.launch
 import org.vosk.Model
 import org.vosk.Recognizer
 import org.vosk.SpeakerModel
-import org.vosk.android.RecognitionListener
-import org.vosk.android.SpeechService
 
 /**
  * "Jarvis" kelimesini dinleyen motor. İki seçenek var:
@@ -75,7 +73,7 @@ class VoskEngine(
     private var model: Model? = null
     private var speaker: SpeakerModel? = null
     private var recognizer: Recognizer? = null
-    private var service: SpeechService? = null
+    private var loop: MicLoop? = null
     private var lastWake = 0L
 
     override fun init(onReady: () -> Unit, onError: (String) -> Unit) {
@@ -93,21 +91,21 @@ class VoskEngine(
 
     override fun start() {
         val m = model ?: return
-        if (service != null) return
+        if (loop != null) return
         try {
             val rec = VoskModels.recognizer(m, speaker)
             recognizer = rec
-            service = SpeechService(rec, VoskModels.SAMPLE_RATE).also { it.startListening(listener) }
+            loop = MicLoop(rec, ::onResult) { msg -> onFail("Uyandırma hatası: $msg") }.also { it.start() }
         } catch (e: Exception) {
+            loop = null
             onFail("Mikrofon açılamadı: ${e.message}")
         }
     }
 
     override fun stop() {
-        // cancel: kaydı durdurur ve mikrofonu bırakır (ses tanıma kullanabilsin diye).
-        runCatching { service?.cancel() }
-        runCatching { service?.shutdown() }
-        service = null
+        // Kaydı durdurur ve mikrofonu bırakır (ses tanıma kullanabilsin diye).
+        loop?.stop()
+        loop = null
         runCatching { recognizer?.close() }
         recognizer = null
     }
@@ -117,18 +115,12 @@ class VoskEngine(
         scope.cancel()
     }
 
-    private val listener = object : RecognitionListener {
-        override fun onPartialResult(hypothesis: String?) {}
-        override fun onResult(hypothesis: String?) {
-            val hit = VoiceId.parse(hypothesis) ?: return
-            if (!VoiceId.accept(context, settings, hit)) return
-            val now = System.currentTimeMillis()
-            if (now - lastWake < 1500) return
-            lastWake = now
-            onWake()
-        }
-        override fun onFinalResult(hypothesis: String?) {}
-        override fun onError(exception: Exception?) { onFail("Uyandırma hatası: ${exception?.message}") }
-        override fun onTimeout() {}
+    private fun onResult(json: String) {
+        val hit = VoiceId.parse(json) ?: return
+        if (!VoiceId.accept(context, settings, hit)) return
+        val now = System.currentTimeMillis()
+        if (now - lastWake < 1500) return
+        lastWake = now
+        onWake()
     }
 }
