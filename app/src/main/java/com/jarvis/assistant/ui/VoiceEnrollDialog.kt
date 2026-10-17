@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jarvis.assistant.JarvisApp
 import com.jarvis.assistant.wake.VoiceId
+import com.jarvis.assistant.wake.VoskModels
 import com.jarvis.assistant.wake.WakeWordService
 import kotlinx.coroutines.delay
 
@@ -49,11 +50,12 @@ fun VoiceEnrollDialog(onDone: (Boolean) -> Unit) {
             WakeWordService.stop(context)
             delay(600)
         }
+        val word = VoskModels.wakeWords(settings).first().replaceFirstChar { it.titlecase(java.util.Locale("tr", "TR")) }
         val samples = mutableListOf<FloatArray>()
         var misses = 0
         try {
             while (samples.size < SAMPLES && misses < 8) {
-                message = "\"Jarvis\" deyin (${samples.size + 1}/$SAMPLES)\n" + TIPS[samples.size % TIPS.size]
+                message = "\"$word\" deyin (${samples.size + 1}/$SAMPLES)\n" + TIPS[samples.size % TIPS.size]
                 val v = VoiceId.captureSample(context)
                 if (v != null) {
                     samples += v

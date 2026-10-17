@@ -72,7 +72,9 @@ class VoskEngine(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var model: Model? = null
     private var speaker: SpeakerModel? = null
-    private var recognizer: Recognizer? = null
+    private var trModel: Model? = null
+    private var recognizers: List<Recognizer> = emptyList()
+    private var phrases: List<String> = listOf("jarvis")
     private var loop: MicLoop? = null
     private var lastWake = 0L
 
@@ -82,6 +84,7 @@ class VoskEngine(
                 val (m, s) = VoskModels.load(context.applicationContext)
                 model = m
                 speaker = s
+                trModel = VoskModels.loadTurkish(context.applicationContext)
                 onReady()
             } catch (e: Exception) {
                 onError("Ses modeli açılamadı: ${e.message}")
@@ -93,9 +96,13 @@ class VoskEngine(
         val m = model ?: return
         if (loop != null) return
         try {
-            val rec = VoskModels.recognizer(m, speaker)
-            recognizer = rec
-            loop = MicLoop(rec, ::onResult) { msg -> onFail("Uyandırma hatası: $msg") }.also { it.start() }
+            phrases = VoskModels.wakeWords(settings)
+            val recs = listOfNotNull(
+                VoskModels.recognizer(m, speaker, phrases, english = true),
+                trModel?.let { VoskModels.recognizer(it, speaker, phrases, english = false) },
+            )
+            recognizers = recs
+            loop = MicLoop(recs, ::onResult) { msg -> onFail("Uyandırma hatası: $msg") }.also { it.start() }
         } catch (e: Exception) {
             loop = null
             onFail("Mikrofon açılamadı: ${e.message}")
@@ -106,8 +113,8 @@ class VoskEngine(
         // Kaydı durdurur ve mikrofonu bırakır (ses tanıma kullanabilsin diye).
         loop?.stop()
         loop = null
-        runCatching { recognizer?.close() }
-        recognizer = null
+        recognizers.forEach { runCatching { it.close() } }
+        recognizers = emptyList()
     }
 
     override fun release() {
@@ -116,7 +123,7 @@ class VoskEngine(
     }
 
     private fun onResult(json: String) {
-        val hit = VoiceId.parse(json) ?: return
+        val hit = VoiceId.parse(json, phrases) ?: return
         if (!VoiceId.accept(context, settings, hit)) return
         val now = System.currentTimeMillis()
         if (now - lastWake < 1500) return

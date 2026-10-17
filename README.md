@@ -157,6 +157,11 @@ bırakıp yer açar, **Sohbetleri sil** hepsini siler. Çıkan rehber Ayarlar'da
   ayarına ve mesafeye göre kendisi ayarlar. Dokunuştan sonra ekran değişmezse biraz daha uzun bir kez daha dokunur.
 
 ### Uyanma sesi ve ses tanıma
+**Uyandırma kelimesi:** Ayarlar > Uyandırma kelimesi'ne istediğin kelimeleri virgülle yaz (ör. `jarvis, can, hey x`).
+İngilizce kelimeler hazır modelle çalışır. Türkçe kelimeler için **Türkçe modeli indir**'e bir kez bas (~35 MB, telefona iner).
+**Dene** ile kelimeyi söyle: yakalanıp yakalanmadığını ve ne duyduğunu gösterir. Tanımazsa okunduğu gibi yaz (X için "iks").
+Kelimeyi değiştirince **Uygula**'ya bas. Picovoice sadece "jarvis" ile çalışır; başka kelimede ücretsiz Vosk kullanılır.
+
 Ayarlar > Uyandırma > **Uyanınca**: söz (söyleyeceği cümleleri sen yazarsın, her satıra bir tane), bip, **kendi sesin**
 (bir mp3/ogg/wav seç, ilk 5 saniyesi çalar) ya da sessiz. **Dene** ile dinleyebilirsin.
 Ses tanıma artık 8 örnek alıyor ve eşiği daha doğru hesaplıyor. Seni ilk seferde tanımazsa hemen bir daha "Jarvis" de:

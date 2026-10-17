@@ -37,16 +37,112 @@ object VoskModels {
         }
     }
 
-    /** Sadece "jarvis" kelimesini arayan, ses izi de çıkaran tanıyıcı. */
-    fun recognizer(model: Model, speaker: SpeakerModel?): Recognizer =
-        Recognizer(model, SAMPLE_RATE, GRAMMAR).apply {
+    // ------------------------------------------------------------------
+    // Türkçe model (isteğe bağlı): "Can" gibi Türkçe uyandırma kelimeleri için.
+    // APK büyümesin diye telefona bir kez indirilir (~35 MB).
+    // ------------------------------------------------------------------
+    private var trModel: Model? = null
+    const val TR_URL = "https://alphacephei.com/vosk/models/vosk-model-small-tr-0.3.zip"
+
+    private fun trDir(context: Context) = File(context.filesDir, "vosk-tr")
+    private fun trReady(context: Context) = File(trDir(context), "ready")
+
+    fun hasTurkish(context: Context) = trReady(context).exists()
+
+    /** İndirilmişse Türkçe modeli yükler; yoksa null. */
+    suspend fun loadTurkish(context: Context): Model? = mutex.withLock {
+        if (!hasTurkish(context)) return@withLock null
+        trModel ?: withContext(Dispatchers.IO) {
+            runCatching { Model(File(trDir(context), "model").absolutePath) }
+                .onFailure { Log.w("JarvisVoice", "Türkçe model açılamadı", it) }.getOrNull()
+        }?.also { trModel = it }
+    }
+
+    /** Türkçe modeli indirir ve açar. @param onProgress yüzde (0-100) */
+    suspend fun downloadTurkish(context: Context, onProgress: (Int) -> Unit): Boolean = withContext(Dispatchers.IO) {
+        val dir = trDir(context)
+        runCatching {
+            dir.deleteRecursively()
+            val tmp = File(dir, "tmp").apply { mkdirs() }
+            val req = okhttp3.Request.Builder().url(TR_URL).build()
+            com.jarvis.assistant.ai.Http.client.newCall(req).execute().use { res ->
+                if (!res.isSuccessful) throw java.io.IOException("İndirme hatası ${res.code}")
+                val body = res.body ?: throw java.io.IOException("Boş cevap")
+                val total = body.contentLength().takeIf { it > 0 } ?: 40_000_000L
+                val counting = object : java.io.FilterInputStream(body.byteStream()) {
+                    var read = 0L
+                    var lastPct = -1
+                    override fun read(b: ByteArray, off: Int, len: Int): Int {
+                        val n = super.read(b, off, len)
+                        if (n > 0) {
+                            read += n
+                            val pct = (read * 100 / total).toInt().coerceAtMost(99)
+                            if (pct != lastPct) { lastPct = pct; onProgress(pct) }
+                        }
+                        return n
+                    }
+                }
+                java.util.zip.ZipInputStream(counting.buffered()).use { zip ->
+                    var e = zip.nextEntry
+                    while (e != null) {
+                        val out = File(tmp, e.name)
+                        // Zip içinden klasör dışına yazmayı engelle.
+                        if (!out.canonicalPath.startsWith(tmp.canonicalPath)) throw java.io.IOException("Geçersiz dosya")
+                        if (e.isDirectory) out.mkdirs() else {
+                            out.parentFile?.mkdirs()
+                            out.outputStream().use { zip.copyTo(it) }
+                        }
+                        e = zip.nextEntry
+                    }
+                }
+            }
+            // Zip içindeki tek klasör modelin kendisi.
+            val root = tmp.listFiles()?.firstOrNull { File(it, "am").exists() || File(it, "conf").exists() } ?: tmp
+            if (!root.renameTo(File(dir, "model"))) throw java.io.IOException("Model taşınamadı")
+            tmp.deleteRecursively()
+            trReady(context).writeText("ok")
+            onProgress(100)
+            true
+        }.getOrElse {
+            Log.w("JarvisVoice", "Türkçe model indirilemedi", it)
+            dir.deleteRecursively()
+            false
+        }
+    }
+
+    fun deleteTurkish(context: Context) {
+        runCatching { trModel?.close() }
+        trModel = null
+        trDir(context).deleteRecursively()
+    }
+
+    /** Ayarlardaki uyandırma kelimeleri (küçük harf). Boşsa "jarvis". */
+    fun wakeWords(settings: Settings): List<String> =
+        settings.wakeWords.split(',', '\n').map { it.trim().lowercase(java.util.Locale("tr", "TR")).replace(Regex("\\s+"), " ") }
+            .filter { it.isNotEmpty() }.distinct().ifEmpty { listOf("jarvis") }
+
+    /** Kelimeleri İngilizce modele uygun yazar (Türkçe ı/İ yerine i). */
+    private fun forEnglish(w: String) = w.replace('ı', 'i').replace('ç', 'c').replace('ş', 's').replace('ğ', 'g').replace('ö', 'o').replace('ü', 'u')
+
+    /**
+     * Sadece uyandırma kelimelerini arayan, ses izi de çıkaran tanıyıcı.
+     * Modelin bilmediği kelimeler Vosk tarafından yok sayılır; bu yüzden her kelime hem
+     * İngilizce hem (varsa) Türkçe modelde aranır, hangisi tanırsa o yakalar.
+     */
+    fun recognizer(model: Model, speaker: SpeakerModel?, words: List<String> = listOf("jarvis"), english: Boolean = true): Recognizer {
+        val list = (if (english) words.map(::forEnglish) else words).distinct()
+        val grammar = org.json.JSONArray(list + "[unk]").toString()
+        return Recognizer(model, SAMPLE_RATE, grammar).apply {
             setWords(true)
             speaker?.let { setSpeakerModel(it) }
             setEndpointerMode(1) // SHORT: kelimeden sonra kısa sessizlikte sonuç ver
         }
+    }
+
+    /** Serbest tanıyıcı (her kelimeyi yazıya çevirir): testte "ne duydu" göstermek için. */
+    fun freeRecognizer(model: Model): Recognizer = Recognizer(model, SAMPLE_RATE).apply { setWords(true) }
 
     const val SAMPLE_RATE = 16000f
-    private const val GRAMMAR = "[\"jarvis\", \"[unk]\"]"
 }
 
 /** Vosk sonucunun çözümlenmiş hâli. */
@@ -54,14 +150,26 @@ data class WakeHit(val confidence: Double, val voice: FloatArray?)
 
 object VoiceId {
 
-    /** Sonuç JSON'unda "jarvis" varsa güven puanı ve ses izini döndürür. */
-    fun parse(json: String?): WakeHit? {
+    /**
+     * Sonuçta uyandırma kelimelerinden biri (çok kelimeli de olabilir: "hey can") varsa
+     * güven puanı ve ses izini döndürür.
+     */
+    fun parse(json: String?, phrases: List<String> = listOf("jarvis")): WakeHit? {
         val o = runCatching { JSONObject(json ?: return null) }.getOrNull() ?: return null
-        val words = o.optJSONArray("result") ?: return null
+        val arr = o.optJSONArray("result") ?: return null
+        val words = (0 until arr.length()).map { arr.getJSONObject(it) }
+        val tokens = words.map { it.optString("word") }
         var conf = -1.0
-        for (i in 0 until words.length()) {
-            val w = words.getJSONObject(i)
-            if (w.optString("word") == "jarvis") conf = maxOf(conf, w.optDouble("conf", 0.0))
+        for (p in phrases) {
+            val parts = p.split(' ')
+            for (variant in listOf(parts, parts.map { it.replace('ı', 'i').replace('ç', 'c').replace('ş', 's').replace('ğ', 'g').replace('ö', 'o').replace('ü', 'u') })) {
+                for (start in 0..tokens.size - variant.size) {
+                    if (tokens.subList(start, start + variant.size) == variant) {
+                        val c = words.subList(start, start + variant.size).minOf { it.optDouble("conf", 0.0) }
+                        conf = maxOf(conf, c)
+                    }
+                }
+            }
         }
         if (conf < 0) return null
         val spk = o.optJSONArray("spk")?.let { a -> FloatArray(a.length()) { a.getDouble(it).toFloat() } }
@@ -237,10 +345,13 @@ object VoiceId {
  * Ses tanıtma kaydı da aynı yoldan geçer ki ses izi aynı koşullarda alınsın.
  */
 class MicLoop(
-    private val recognizer: Recognizer,
+    private val recognizers: List<Recognizer>,
     private val onResult: (String) -> Unit,
     private val onError: (String) -> Unit,
 ) {
+    constructor(recognizer: Recognizer, onResult: (String) -> Unit, onError: (String) -> Unit) :
+        this(listOf(recognizer), onResult, onError)
+
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
     @Volatile private var running = false
     private var thread: Thread? = null
@@ -281,9 +392,12 @@ class MicLoop(
                 while (running) {
                     val n = r.read(buf, 0, buf.size)
                     if (n <= 0) continue
-                    if (recognizer.acceptWaveForm(buf, n)) {
-                        val res = recognizer.result
-                        main.post { if (running) onResult(res) }
+                    // Aynı ses parçası her tanıyıcıya verilir (ör. İngilizce + Türkçe model).
+                    for (rec in recognizers) {
+                        if (rec.acceptWaveForm(buf, n)) {
+                            val res = rec.result
+                            main.post { if (running) onResult(res) }
+                        }
                     }
                 }
             } catch (e: Exception) {

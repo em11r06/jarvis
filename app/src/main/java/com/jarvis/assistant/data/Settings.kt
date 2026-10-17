@@ -44,6 +44,8 @@ class Settings(context: Context) {
     var followUpSeconds by int("follow_up_seconds", 6)
     /** Uyanınca bip yerine "Buyrun efendim" gibi sesli cevap ver. */
     var wakeGreeting by bool("wake_greeting", true)
+    /** Uyandırma kelimeleri, virgülle ayrılmış (ör. "jarvis, can"). */
+    var wakeWords by str("wake_words", "jarvis")
     /** Uyanınca ne yapsın: WAKE_SPEAK (söz), WAKE_BEEP, WAKE_FILE (seçilen ses dosyası), WAKE_SILENT. */
     var wakeSound: String
         get() = prefs.getString("wake_sound", null) ?: if (wakeGreeting) WAKE_SPEAK else WAKE_BEEP

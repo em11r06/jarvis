@@ -76,7 +76,9 @@ class WakeWordService : Service() {
         val key = JarvisApp.instance.settings.picovoiceKey
         val onWake: () -> Unit = { scope.launch { onWakeWord() } }
         val onFail: (String) -> Unit = { msg -> scope.launch { updateNotification(msg) } }
-        val e = if (key.isNotBlank()) {
+        // Porcupine'in hazır kelimesi sadece "jarvis"; başka kelime seçildiyse Vosk kullanılır.
+        val onlyJarvis = VoskModels.wakeWords(JarvisApp.instance.settings) == listOf("jarvis")
+        val e = if (key.isNotBlank() && onlyJarvis) {
             PorcupineEngine(applicationContext, key, onWake, onFail)
         } else {
             VoskEngine(applicationContext, JarvisApp.instance.settings, onWake, onFail)

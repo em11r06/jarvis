@@ -67,6 +67,11 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
     var elevenKey by remember { mutableStateOf(s.elevenKey) }
     var wake by remember { mutableStateOf(s.wakeEnabled) }
     var wakeSound by remember { mutableStateOf(s.wakeSound) }
+    var wakeWords by remember { mutableStateOf(s.wakeWords) }
+    var wordsChanged by remember { mutableStateOf(false) }
+    var testingWake by remember { mutableStateOf(false) }
+    var hasTr by remember { mutableStateOf(com.jarvis.assistant.wake.VoskModels.hasTurkish(context)) }
+    var trProgress by remember { mutableStateOf(-1) }
     var wakePhrases by remember { mutableStateOf(s.wakePhrases) }
     var wakeVolume by remember { mutableFloatStateOf(s.wakeVolume) }
     var hasWakeFile by remember { mutableStateOf(WakeWordService.wakeFile(context).exists()) }
@@ -155,9 +160,52 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
             Spacer(Modifier.height(6.dp))
             SecretField("ElevenLabs API anahtarı (isteğe bağlı)", elevenKey, { elevenKey = it; s.elevenKey = it })
 
-            SectionTitle("Uyandırma kelimesi (\"Jarvis\")")
+            SectionTitle("Uyandırma kelimesi")
+            OutlinedTextField(
+                wakeWords, { wakeWords = it; s.wakeWords = it; wordsChanged = true },
+                label = { Text("Kelimeler (virgülle, ör. jarvis, can, hey x)") },
+                singleLine = true, modifier = Modifier.fillMaxWidth(),
+            )
             Text(
-                "Anahtar gerekmez: Jarvis ücretsiz ve çevrimdışı Vosk motoruyla dinler. Picovoice anahtarınız varsa girin; daha az pil harcar.",
+                "İngilizce kelimeler (jarvis) hazır modelle çalışır. Türkçe kelimeler (can, emir...) için Türkçe modeli bir kez indirin (~35 MB). " +
+                    "Kısa ve günlük konuşmada sık geçen kelimeler (\"can\" gibi) yanlışlıkla uyandırabilir; ses kaydınız bunu azaltır.",
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+                OutlinedButton(onClick = {
+                    if (Permissions.has(context, Manifest.permission.RECORD_AUDIO)) testingWake = true
+                    else message = "Önce mikrofon izni verin (Kurulum sihirbazı)."
+                }) { Text("Dene") }
+                if (wordsChanged && wakeRunning) Button(onClick = {
+                    wordsChanged = false
+                    scope.launch {
+                        WakeWordService.stop(context)
+                        kotlinx.coroutines.delay(700)
+                        WakeWordService.start(context)
+                    }
+                }) { Text("Uygula") }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+                when {
+                    trProgress in 0..99 -> Text("Türkçe model indiriliyor... %$trProgress", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
+                    hasTr -> {
+                        Text("Türkçe model yüklü ✓  ", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
+                        TextButton(onClick = { com.jarvis.assistant.wake.VoskModels.deleteTurkish(context); hasTr = false }) { Text("Sil") }
+                    }
+                    else -> OutlinedButton(onClick = {
+                        trProgress = 0
+                        scope.launch {
+                            val ok = com.jarvis.assistant.wake.VoskModels.downloadTurkish(context) { p -> trProgress = p }
+                            trProgress = -1
+                            hasTr = ok
+                            message = if (ok) "" else "Türkçe model indirilemedi; internet bağlantısını kontrol edip tekrar deneyin."
+                            if (ok && wakeRunning) { WakeWordService.stop(context); kotlinx.coroutines.delay(700); WakeWordService.start(context) }
+                        }
+                    }) { Text("Türkçe modeli indir") }
+                }
+            }
+            Text(
+                "Anahtar gerekmez: Jarvis ücretsiz ve çevrimdışı Vosk motoruyla dinler. Picovoice anahtarınız varsa girin; daha az pil harcar (sadece \"jarvis\" kelimesiyle).",
                 fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             SecretField("Picovoice AccessKey (isteğe bağlı)", picoKey, { picoKey = it; s.picovoiceKey = it })
@@ -413,6 +461,8 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
             Spacer(Modifier.height(40.dp))
         }
     }
+
+    if (testingWake) WakeTestDialog(onDone = { testingWake = false; wordsChanged = false })
 
     if (enrolling) {
         VoiceEnrollDialog(onDone = { ok ->
