@@ -379,6 +379,20 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
                 onClick = { scope.launch { com.jarvis.assistant.ai.NanoModel.download() } },
                 modifier = Modifier.padding(top = 6.dp),
             ) { Text("Modeli indir / yeniden kontrol et") }
+            if (nanoStatus.startsWith("Gemini Nano şu an")) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+                    listOf("AICore" to com.jarvis.assistant.ai.NanoModel.AICORE, "Private Compute" to com.jarvis.assistant.ai.NanoModel.PCS).forEach { (label, pkg) ->
+                        TextButton(onClick = {
+                            runCatching {
+                                context.startActivity(
+                                    android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("market://details?id=$pkg"))
+                                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                                )
+                            }
+                        }) { Text("$label güncelle") }
+                    }
+                }
+            }
 
             SectionTitle("Konuşma tarzım")
             Text(

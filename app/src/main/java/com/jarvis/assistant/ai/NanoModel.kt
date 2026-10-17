@@ -24,21 +24,52 @@ object NanoModel {
     /** Model kullanıma hazır mı? */
     suspend fun isReady(): Boolean = checkStatus() == FeatureStatus.AVAILABLE
 
+    /** Gemini Nano'yu telefonda çalıştıran Google sistem uygulaması. */
+    const val AICORE = "com.google.android.aicore"
+    /** AICore'un model indirmek için kullandığı Google uygulaması. */
+    const val PCS = "com.google.android.as.oss"
+
+    private fun installed(pkg: String): Boolean = runCatching {
+        com.jarvis.assistant.JarvisApp.instance.packageManager.getPackageInfo(pkg, 0)
+    }.isSuccess
+
+    /** Kullanılamıyorsa nedeni (ekranda gösterilir); kullanılabiliyorsa boş. */
+    @Volatile var lastError = ""
+        private set
+
     suspend fun checkStatus(): Int {
+        var err = ""
         val s = runCatching { model.checkStatus() }
-            .onFailure { Log.w(TAG, "Durum alınamadı", it) }
+            .onFailure {
+                Log.w(TAG, "Durum alınamadı", it)
+                err = it.message ?: it.javaClass.simpleName
+            }
             .getOrDefault(FeatureStatus.UNAVAILABLE)
+        lastError = err
         _status.value = when (s) {
             FeatureStatus.AVAILABLE -> "Hazır: internetsizken de sohbet edebilirim."
             FeatureStatus.DOWNLOADABLE -> "Telefonunuz destekliyor; modeli indirmeniz gerekiyor."
             FeatureStatus.DOWNLOADING -> "Model indiriliyor..."
-            else -> "Bu telefonda telefonda çalışan yapay zeka (Gemini Nano) kullanılamıyor."
+            else -> buildString {
+                append("Gemini Nano şu an kullanılamıyor")
+                if (err.isNotBlank()) append(" (").append(err.take(160)).append(")")
+                append(".\n")
+                if (!installed(AICORE)) {
+                    append("Telefonda \"Android AICore\" uygulaması yok ya da kapalı. Aşağıdaki düğmeyle Play Store'dan yükleyin/güncelleyin.")
+                } else {
+                    append("Çoğu zaman \"Android AICore\" ve \"Private Compute Services\" uygulamalarının güncellenmesi çözer: ")
+                    append("aşağıdaki düğmelerle Play Store'da güncelleyin, telefonu yeniden başlatın, Wi-Fi'ye bağlanıp \"yeniden kontrol et\"e basın. ")
+                    append("Google bu özelliği telefonunuza henüz açmadıysa birkaç gün sonra tekrar deneyin.")
+                }
+            }
         }
         return s
     }
 
     /** Modeli indirir; ilerlemeyi durum metnine yazar. */
     suspend fun download() {
+        // Telefon desteklemiyorsa indirme denemek yerine nedenini göster.
+        if (checkStatus() == FeatureStatus.UNAVAILABLE) return
         _status.value = "İndirme başlıyor..."
         model.download()
             .catch { e ->
