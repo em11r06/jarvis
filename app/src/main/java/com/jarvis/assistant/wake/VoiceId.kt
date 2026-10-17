@@ -228,6 +228,7 @@ object VoiceId {
     private const val MAX_SAMPLES = 24
     /** Öğrenme sırasında silinmeyecek ilk kayıt örneği sayısı. */
     private const val ENROLL_KEEP = 8
+}
 
 /**
  * Mikrofonu okuyup Vosk tanıyıcısına veren döngü. Vosk'un hazır SpeechService'i yerine bunu
