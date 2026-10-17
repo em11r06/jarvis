@@ -14,6 +14,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Telefon özelliği zorunlu değil (tablette de kurulabilsin) -->
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
@@ -91,6 +92,17 @@
             android:name=".wake.WakeWordService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+
+        <!-- Güncelleme APK'sını kurulum ekranına vermek için -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <receiver
             android:name=".wake.BootReceiver"

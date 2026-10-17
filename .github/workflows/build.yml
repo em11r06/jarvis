@@ -98,5 +98,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "Jarvis (son sürüm #$GITHUB_RUN_NUMBER)" \
-            --notes "Otomatik derleme. Commit: ${GITHUB_SHA::7} ($GITHUB_REF_NAME). Telefondan Jarvis.apk dosyasını indirip kurun." \
+            --notes "$(git log -1 --pretty=%s)
+
+          Sürüm #$GITHUB_RUN_NUMBER, commit ${GITHUB_SHA::7}. Jarvis bu güncellemeyi kendisi indirir; elle kurmak için Jarvis.apk dosyasını indirin." \
             --latest

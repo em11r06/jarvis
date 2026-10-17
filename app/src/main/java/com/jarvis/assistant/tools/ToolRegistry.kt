@@ -24,6 +24,7 @@ object ToolRegistry {
         FenerTool(),
         SaatTarihTool(),
         PilDurumuTool(),
+        GuncelleTool(),
         // Ekran kontrolü (erişilebilirlik servisi)
         EkraniOkuTool(),
         DokunTool(),

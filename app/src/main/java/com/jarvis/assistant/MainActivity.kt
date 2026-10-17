@@ -9,6 +9,9 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -19,6 +22,7 @@ import com.jarvis.assistant.ui.SettingsScreen
 import com.jarvis.assistant.ui.SetupScreen
 import com.jarvis.assistant.ui.VoiceSettingsScreen
 import com.jarvis.assistant.ui.theme.JarvisTheme
+import com.jarvis.assistant.update.Updater
 import com.jarvis.assistant.wake.WakeWordService
 
 class MainActivity : ComponentActivity() {
@@ -38,6 +42,9 @@ class MainActivity : ComponentActivity() {
         // Uyandırma açıksa ve servis çalışmıyorsa (ör. yeniden başlatmadan sonra) şimdi başlat.
         if (app.settings.wakeEnabled && !WakeWordService.isRunning.value) WakeWordService.start(this)
 
+        // GitHub'da yeni sürüm var mı? Varsa arka planda indirir.
+        Updater.checkInBackground(this)
+
         setContent {
             JarvisTheme {
                 // Basit ekran geçişi: hangi ekranın açık olduğunu tutar.
@@ -46,6 +53,23 @@ class MainActivity : ComponentActivity() {
                 }
                 BackHandler(enabled = screen == SCREEN_SETTINGS || screen == SCREEN_VOICE) {
                     screen = if (screen == SCREEN_VOICE) SCREEN_SETTINGS else SCREEN_CHAT
+                }
+                // Güncelleme indirildiyse bir kez sor.
+                val update by Updater.state.collectAsStateWithLifecycle()
+                var dismissedVersion by rememberSaveable { mutableStateOf(0) }
+                (update as? Updater.State.Ready)?.takeIf { it.version != dismissedVersion }?.let { ready ->
+                    AlertDialog(
+                        onDismissRequest = { dismissedVersion = ready.version },
+                        title = { Text("Yeni sürüm hazır (${ready.version})") },
+                        text = { Text(ready.notes.ifBlank { "Jarvis'in yeni sürümü indirildi." } + "\n\nKurulum ekranında Güncelle'ye dokunmanız yeterli.") },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                dismissedVersion = ready.version
+                                Updater.install(this@MainActivity)
+                            }) { Text("Güncelle") }
+                        },
+                        dismissButton = { TextButton(onClick = { dismissedVersion = ready.version }) { Text("Sonra") } },
+                    )
                 }
                 when (screen) {
                     SCREEN_SETUP -> SetupScreen(onFinish = { screen = SCREEN_SETTINGS })
@@ -79,6 +103,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra(Updater.EXTRA_INSTALL, false) == true) Updater.install(this)
         // Bildirimden "başlatmak için dokun" ile gelindiyse uyandırma servisini başlat.
         if (intent?.getBooleanExtra(WakeWordService.EXTRA_START_WAKE, false) == true) {
             WakeWordService.start(this)

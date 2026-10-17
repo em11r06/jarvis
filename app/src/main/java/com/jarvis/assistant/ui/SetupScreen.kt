@@ -42,6 +42,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.jarvis.assistant.JarvisApp
 import com.jarvis.assistant.core.Permissions
+import com.jarvis.assistant.update.Updater
 import com.jarvis.assistant.ui.theme.JarvisCyan
 
 /** Sihirbazın bir adımı. */
@@ -118,6 +119,12 @@ fun SetupScreen(onFinish: () -> Unit) {
                 "Samsung, arka plandaki uygulamaları pil tasarrufu için kapatabiliyor. Jarvis'i muaf tutarsanız uyandırma kelimesi kesintisiz çalışır. Porcupine çok az pil harcar.",
                 { Permissions.ignoresBattery(it) }, "Muaf tut",
                 action = { Permissions.open(it, Permissions.batteryIntent(it), Permissions.appInfoIntent(it)) },
+            ),
+            SetupStep(
+                "Güncellemeleri kurma izni",
+                "Yeni sürüm çıkınca Jarvis onu kendisi indirir ve kurulum ekranını açar; sizin tek yapacağınız \"Güncelle\"ye dokunmak. Bunun için açılan ekranda \"Bu kaynaktan izin ver\"i açın.",
+                { Updater.canInstall(it) }, "İzin ver",
+                action = { Permissions.open(it, Updater.permissionIntent(it)) },
             ),
             SetupStep(
                 "Kısıtlı ayarlara izin ver",

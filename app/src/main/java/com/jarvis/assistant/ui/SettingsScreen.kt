@@ -40,6 +40,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jarvis.assistant.JarvisApp
 import com.jarvis.assistant.core.Permissions
 import com.jarvis.assistant.data.Settings
+import com.jarvis.assistant.update.Updater
 import com.jarvis.assistant.wake.WakeWordService
 import kotlin.math.roundToInt
 
@@ -162,6 +163,27 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
                 onClick = { Permissions.open(context, *Permissions.defaultAssistantIntents().toTypedArray()) },
                 modifier = Modifier.padding(top = 6.dp),
             ) { Text("Varsayılan asistan ayarını aç") }
+
+            SectionTitle("Güncelleme")
+            val update by Updater.state.collectAsStateWithLifecycle()
+            Text(
+                "Kurulu sürüm: ${Updater.currentVersion}. " + when (val u = update) {
+                    is Updater.State.Checking -> "Kontrol ediliyor..."
+                    is Updater.State.UpToDate -> "En güncel sürüm."
+                    is Updater.State.Downloading -> "Sürüm ${u.version} indiriliyor: %${u.percent}"
+                    is Updater.State.Ready -> "Sürüm ${u.version} indirildi, kurulmaya hazır."
+                    is Updater.State.Error -> "Hata: ${u.message}"
+                    else -> "Jarvis açılınca yeni sürümü kendisi kontrol eder."
+                },
+                fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+                if (update is Updater.State.Ready) {
+                    Button(onClick = { Updater.install(context) }) { Text("Şimdi güncelle") }
+                } else {
+                    OutlinedButton(onClick = { Updater.checkInBackground(context, force = true) }) { Text("Güncellemeleri denetle") }
+                }
+            }
 
             SectionTitle("Diğer")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

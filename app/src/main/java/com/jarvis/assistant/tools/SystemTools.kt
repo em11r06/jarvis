@@ -101,3 +101,18 @@ class ZamanlayiciKurTool : Tool {
         return if (Launcher.start(ctx, intent)) "$text zamanlayıcı kuruldu." else "Zamanlayıcı kurulamadı."
     }
 }
+
+class GuncelleTool : Tool {
+    override val name = "guncelle"
+    override val description = "Jarvis'in yeni sürümü var mı kontrol eder; varsa indirir ve kurulum ekranını açar. Kullanıcı 'kendini güncelle', 'güncelleme var mı' derse kullan."
+    override val parameters = Schema.empty()
+
+    override suspend fun run(ctx: Context, args: JSONObject): String {
+        val msg = com.jarvis.assistant.update.Updater.checkAndDownload(ctx)
+        return if (com.jarvis.assistant.update.Updater.state.value is com.jarvis.assistant.update.Updater.State.Ready) {
+            com.jarvis.assistant.update.Updater.install(ctx)
+        } else {
+            msg
+        }
+    }
+}

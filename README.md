@@ -27,8 +27,13 @@ internette araştırma yapar ve telefonda komutlarını yerine getirir. Arka pla
    5. Hâlâ engelleniyorsa Samsung'un **Otomatik Engelleyici**'sini kapat: Ayarlar > Güvenlik ve gizlilik > Otomatik Engelleyici
 5. Kur ve Jarvis'i aç. Kurulum sihirbazı başlar; adımları sırayla takip et.
 
-Her push'ta yeni APK otomatik derlenir ve aynı "latest" sayfasına konur. Güncellemek için
-aynı yerden yeni APK'yı indirip üzerine kurman yeterli.
+Her push'ta yeni APK otomatik derlenir ve aynı "latest" sayfasına konur.
+
+**Otomatik güncelleme:** Jarvis açılınca (en fazla 3 saatte bir) yeni sürüm var mı diye bakar,
+varsa arka planda indirir ve "Yeni sürüm hazır" diye sorar. **Güncelle**'ye dokunman yeterli.
+Sesli olarak "Jarvis, kendini güncelle" de diyebilirsin. Ayarlar > Güncelleme bölümünden elle de denetlenebilir.
+Bunun için depo **public** olmalı (kodda hiçbir anahtar yok) ve Jarvis'e "bilinmeyen uygulamaları yükleme"
+izni verilmeli (sihirbaz ister).
 
 ## 2. API anahtarları (nereden alınır?)
 
@@ -168,7 +173,7 @@ Kararsız kaldığım yerlerde şunları seçtim:
 - **Ekran görüntüsü:** Erişilebilirlik servisinin `GLOBAL_ACTION_TAKE_SCREENSHOT` işlemi (sistem gibi galeriye kaydeder).
 - **Dokun/yaz/kaydır sonrası:** Araç, işlemden sonra ekranın yeni hâlini otomatik döndürür; yapay zeka bir sonraki adımı daha az turda seçer.
 - **Varsayılan asistan:** Tam bir VoiceInteractionService yerine `ACTION_ASSIST` destekleyen ekran kullanıldı (daha basit, yan tuş için yeterli).
-- **Release:** Her dalda her push'ta "latest" sürümü silinip yeniden oluşturulur.
+- **Release:** Her dalda her push'ta "latest" sürümü silinip yeniden oluşturulur. Sürüm numarası = Actions çalışma numarası (versionCode); Jarvis güncellemeyi buna göre anlar.
 - **İmza:** İmza anahtarını depoya koymadım; sadece Secrets'tan okunur. Secret yoksa önbellekteki debug anahtarı kullanılır (yukarıya bak).
 
 ## 8. Bilinen sınırlamalar
