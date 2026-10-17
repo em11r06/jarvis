@@ -102,8 +102,8 @@ class SpeechListener(private val context: Context) {
                         putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
                     }
                     // Cümle arasındaki kısa duraklamalarda kesmesin (tanıyıcı destekliyorsa).
-                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
-                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1200L)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1600L)
                     putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
                 }
                 try {
