@@ -62,6 +62,7 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
     var greeting by remember { mutableStateOf(s.wakeGreeting) }
     var hasPrint by remember { mutableStateOf(s.voicePrint.isNotBlank()) }
     var ownNumber by remember { mutableStateOf(s.ownNumber) }
+    var curtain by remember { mutableStateOf(s.curtainEnabled) }
     var threshold by remember { mutableFloatStateOf(s.voiceThreshold) }
     var enrolling by remember { mutableStateOf(false) }
     var follow by remember { mutableFloatStateOf(s.followUpSeconds.toFloat()) }
@@ -233,6 +234,16 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
                 onClick = { Permissions.open(context, Permissions.notificationAccessIntent()) },
                 modifier = Modifier.padding(top = 6.dp),
             ) { Text("Bildirim erişimi ayarı") }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text("İşleri perde arkasında yap", color = MaterialTheme.colorScheme.onSurface)
+                    Text(
+                        "Jarvis başka uygulamada iş yaparken ekranı \"Jarvis çalışıyor\" paneliyle örter, bitince kaldığınız yere döner.",
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = curtain, onCheckedChange = { curtain = it; s.curtainEnabled = it })
+            }
             Spacer(Modifier.height(6.dp))
             OutlinedTextField(
                 ownNumber, { ownNumber = it; s.ownNumber = it },

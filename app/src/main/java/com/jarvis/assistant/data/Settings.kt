@@ -52,6 +52,9 @@ class Settings(context: Context) {
     /** Kullanıcının kendi numarası (WhatsApp'ta kendine attığı mesajları açmak için). */
     var ownNumber by str("own_number", "")
 
+    /** Ekranda yapılan işlerde (WhatsApp, sohbet okuma...) üstte "Jarvis çalışıyor" perdesi göster. */
+    var curtainEnabled by bool("curtain_enabled", true)
+
     var setupDone by bool("setup_done", false)
 
     private fun str(key: String, def: String) = object : ReadWriteProperty<Any?, String> {

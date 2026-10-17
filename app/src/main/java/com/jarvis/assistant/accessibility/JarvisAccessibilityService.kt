@@ -34,6 +34,7 @@ class JarvisAccessibilityService : AccessibilityService() {
     override fun onInterrupt() {}
 
     override fun onDestroy() {
+        hideCurtain()
         if (instance === this) instance = null
         Launcher.accessibilityContext = null
         super.onDestroy()
@@ -185,6 +186,60 @@ class JarvisAccessibilityService : AccessibilityService() {
     }
 
     fun global(action: Int): Boolean = performGlobalAction(action)
+
+    // ------------------------------------------------------------------
+    // Perde: ekranda iş yaparken üstte "Jarvis çalışıyor" paneli
+    // ------------------------------------------------------------------
+
+    private var curtain: android.view.View? = null
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    /**
+     * Ekranı Jarvis'in paneliyle örter. Erişilebilirlik katmanı dokunuşları geçirir
+     * (FLAG_NOT_TOUCHABLE), bu yüzden alttaki uygulamada dokunma ve yazma çalışmaya devam eder.
+     */
+    fun showCurtain(message: String = "Jarvis çalışıyor…") = mainHandler.post {
+        if (curtain != null) {
+            (curtain?.findViewWithTag<android.widget.TextView>("msg"))?.text = message
+            return@post
+        }
+        val wm = getSystemService(android.view.WindowManager::class.java)
+        val cyan = 0xFF00E5FF.toInt()
+        val box = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            gravity = android.view.Gravity.CENTER
+            setBackgroundColor(0xF2000000.toInt())
+            addView(android.widget.ProgressBar(this@JarvisAccessibilityService).apply {
+                indeterminateTintList = android.content.res.ColorStateList.valueOf(cyan)
+            })
+            addView(android.widget.TextView(this@JarvisAccessibilityService).apply {
+                tag = "msg"
+                text = message
+                setTextColor(cyan)
+                textSize = 20f
+                gravity = android.view.Gravity.CENTER
+                setPadding(48, 36, 48, 0)
+            })
+        }
+        val lp = android.view.WindowManager.LayoutParams(
+            android.view.WindowManager.LayoutParams.MATCH_PARENT,
+            android.view.WindowManager.LayoutParams.MATCH_PARENT,
+            android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            android.graphics.PixelFormat.TRANSLUCENT,
+        )
+        runCatching {
+            wm.addView(box, lp)
+            curtain = box
+        }
+    }
+
+    fun hideCurtain() = mainHandler.post {
+        curtain?.let { v -> runCatching { getSystemService(android.view.WindowManager::class.java).removeView(v) } }
+        curtain = null
+    }
 
     /** Ön plandaki uygulamanın paket adı (Jarvis değilse). */
     fun foregroundPackage(): String? = rootInActiveWindow?.packageName?.toString()

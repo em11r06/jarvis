@@ -121,6 +121,14 @@ Jarvis Ayarlar > **Mesajlar** > Bildirim erişimi ayarı > Jarvis'i aç. (Kısı
   (`sohbeti_oku`, eski mesajlar için listeyi kendisi kaydırır). Bunun için Ayarlar > Mesajlar > "Kendi numaranız"ı bir kez yaz.
   "Kendime attığım son mesajları kopyala" dersen okuyup panoya kopyalar (`panoya_kopyala`).
 
+### Arka plan ve "perde"
+Tamamen arka planda çalışanlar: SMS, arama, alarm/zamanlayıcı, ses, fener, müzik kontrolü, web araması,
+mesaj okuma (bildirim kaydı) ve bildirimden WhatsApp yanıtı. Bazı işler (sohbet açıp okumak, bildirimsiz WhatsApp
+gönderimi, başka uygulamalarda işlem) WhatsApp gibi uygulamalar arka plan yolu sunmadığı için ekranda yapılır.
+Bu sırada Jarvis ekranı "Jarvis çalışıyor…" perdesiyle örter (erişilebilirlik katmanı, dokunuşları geçirir),
+iş bitince perdeyi kaldırıp kullanıcıyı kaldığı ekrana döndürür. Ayarlar > Mesajlar'dan kapatılabilir.
+Spotify'da şarkı başlatınca da kullanıcı kaldığı ekrana döner. Ekran kilitliyken ekranda yapılan işler mümkün değildir.
+
 ## 5. Kullanım örnekleri
 
 - "Jarvis... nasılsın?" (sohbet)

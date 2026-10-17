@@ -47,6 +47,11 @@ class SarkiCalTool : Tool {
         val audio = ctx.getSystemService(AudioManager::class.java)
         delay(3500)
         if (!audio.isMusicActive) sendMediaKey(ctx, KeyEvent.KEYCODE_MEDIA_PLAY)
+        delay(800)
+        // Şarkı başladı; kullanıcıyı kaldığı ekrana geri götür (Spotify arkada çalmaya devam eder).
+        com.jarvis.assistant.core.ScreenReturn.startPackage
+            ?.takeIf { it != SPOTIFY }
+            ?.let { com.jarvis.assistant.core.ScreenReturn.restore(ctx, it) }
         return "Spotify'da '$q' çalınıyor."
     }
 

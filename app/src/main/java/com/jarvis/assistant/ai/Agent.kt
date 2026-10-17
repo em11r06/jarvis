@@ -47,6 +47,18 @@ class Agent(
         com.jarvis.assistant.core.ScreenReturn.remember()
         val tools = ToolRegistry.all.map { it.spec() }
 
+        try {
+            return runLoop(tools, onToolUse, onInterimText)
+        } finally {
+            com.jarvis.assistant.accessibility.JarvisAccessibilityService.instance?.hideCurtain()
+        }
+    }
+
+    private suspend fun runLoop(
+        tools: List<ToolSpec>,
+        onToolUse: (String) -> Unit,
+        onInterimText: suspend (String) -> Unit,
+    ): String {
         repeat(MAX_STEPS) {
             val reply = fixFakeCall(provider().complete(systemPrompt(), history.turns.toList(), tools).turn)
             history.turns += reply
@@ -56,11 +68,19 @@ class Agent(
                 compactIfNeeded()
                 return reply.text.ifBlank { "Tamamdır." }
             }
-            if (reply.text.isNotBlank()) onInterimText(reply.text)
+            if (reply.text.isNotBlank()) {
+                // Kullanıcıya bir şey söylerken (ör. onay sorusu) perdeyi kaldır.
+                com.jarvis.assistant.accessibility.JarvisAccessibilityService.instance?.hideCurtain()
+                onInterimText(reply.text)
+            }
 
             // Araçları sırayla çalıştır (ör. önce şarkıyı aç, sonra sesi fulle).
             val results = reply.calls.map { call ->
                 onToolUse(call.name)
+                // Ekranda iş yapan araçlarda üstü perdeyle ört; kullanıcı arkadaki gidip gelmeyi görmesin.
+                if (call.name in CURTAIN_TOOLS && settings.curtainEnabled) {
+                    com.jarvis.assistant.accessibility.JarvisAccessibilityService.instance?.showCurtain()
+                }
                 val tool = ToolRegistry.find(call.name)
                 val out = if (tool == null) {
                     "Hata: '${call.name}' adında araç yok."
@@ -143,6 +163,12 @@ class Agent(
     companion object {
         private const val TAG = "JarvisAgent"
         private const val MAX_STEPS = 25
+
+        /** Ekranda iş yapan, perdeyle örtülecek araçlar. */
+        private val CURTAIN_TOOLS = setOf(
+            "whatsapp_gonder", "sohbeti_oku", "sarki_cal",
+            "dokun", "yaz", "kaydir", "ekrani_oku", "geri", "yeniden_baslat",
+        )
         private const val MAX_TOOL_RESULT = 6000
         private const val COMPACT_AT = 40
         private const val KEEP_RECENT = 14
