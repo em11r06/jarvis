@@ -63,7 +63,7 @@ jobs:
       - name: Türkçe uyandırma kelimesi testi
         continue-on-error: true
         run: |
-          sudo apt-get install -y -qq espeak-ng >/dev/null
+          sudo apt-get install -y -qq espeak-ng ffmpeg >/dev/null
           pip install -q vosk
           curl -fsSL -o /tmp/tr.zip https://alphacephei.com/vosk/models/vosk-model-small-tr-0.3.zip
           unzip -q /tmp/tr.zip -d /tmp/trm

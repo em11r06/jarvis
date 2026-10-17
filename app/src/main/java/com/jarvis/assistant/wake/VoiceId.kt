@@ -53,7 +53,7 @@ object VoskModels {
     suspend fun loadTurkish(context: Context): Model? = mutex.withLock {
         if (!hasTurkish(context)) return@withLock null
         trModel ?: withContext(Dispatchers.IO) {
-            runCatching { Model(File(trDir(context), "model").absolutePath) }
+            runCatching { Model(modelRoot(File(trDir(context), "model")).absolutePath) }
                 .onFailure { Log.w("JarvisVoice", "Türkçe model açılamadı", it) }.getOrNull()
         }?.also { trModel = it }
     }
@@ -96,8 +96,8 @@ object VoskModels {
                     }
                 }
             }
-            // Zip içindeki tek klasör modelin kendisi.
-            val root = tmp.listFiles()?.firstOrNull { File(it, "am").exists() || File(it, "conf").exists() } ?: tmp
+            val root = modelRoot(tmp)
+            if (!File(root, "final.mdl").exists() && !File(root, "am/final.mdl").exists()) throw java.io.IOException("Model dosyaları bulunamadı")
             if (!root.renameTo(File(dir, "model"))) throw java.io.IOException("Model taşınamadı")
             tmp.deleteRecursively()
             trReady(context).writeText("ok")
@@ -108,6 +108,19 @@ object VoskModels {
             dir.deleteRecursively()
             false
         }
+    }
+
+    /**
+     * Modelin asıl klasörünü bulur. Yeni modellerde "am/final.mdl", eski Türkçe modelde
+     * doğrudan "final.mdl" bulunur; zip içinde bir klasör daha olabilir.
+     */
+    private fun modelRoot(dir: File, depth: Int = 0): File {
+        if (File(dir, "final.mdl").exists() || File(dir, "am/final.mdl").exists()) return dir
+        if (depth < 3) dir.listFiles()?.filter { it.isDirectory }?.forEach { sub ->
+            val r = modelRoot(sub, depth + 1)
+            if (File(r, "final.mdl").exists() || File(r, "am/final.mdl").exists()) return r
+        }
+        return dir
     }
 
     fun deleteTurkish(context: Context) {
