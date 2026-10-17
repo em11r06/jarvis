@@ -145,6 +145,14 @@ fun SetupScreen(onFinish: () -> Unit) {
                 action = { Permissions.open(it, Permissions.accessibilityIntent()) },
             ),
             SetupStep(
+                "Bildirim erişimi",
+                "Gelen mesajları (WhatsApp, SMS, Instagram...) kaydedip \"sabah altıdan beri ne gelmiş\" sorusuna eksiksiz cevap verebilmem ve " +
+                    "WhatsApp mesajlarını uygulamayı açmadan, bildirimden yanıtlayabilmem için.\n\n" +
+                    "Açılan listede Jarvis'i bulup açın. Mesajlar sadece telefonunuzda saklanır; siz sorunca yapay zekaya gönderilir.",
+                { Permissions.notificationAccess(it) }, "Bildirim erişimini aç",
+                action = { Permissions.open(it, Permissions.notificationAccessIntent()) },
+            ),
+            SetupStep(
                 "API anahtarları",
                 "Konuşabilmem için bir yapay zeka anahtarı gerekli. Gemini ücretsiz.\n\n" +
                     "Gemini: aistudio.google.com > Get API key\n" +

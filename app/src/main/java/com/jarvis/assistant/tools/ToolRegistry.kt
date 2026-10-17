@@ -18,6 +18,8 @@ object ToolRegistry {
         KisiBulTool(),
         AramaYapTool(),
         SmsGonderTool(),
+        WhatsappGonderTool(),
+        MesajlariOkuTool(),
         // Sistem
         AlarmKurTool(),
         ZamanlayiciKurTool(),

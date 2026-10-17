@@ -220,6 +220,19 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
                 }
             }
 
+            SectionTitle("Mesajlar")
+            Text(
+                if (Permissions.notificationAccess(context))
+                    "Bildirim erişimi açık: gelen mesajlar kaydediliyor, WhatsApp mesajları arka planda gönderilebiliyor."
+                else
+                    "Bildirim erişimi kapalı. Açarsanız Jarvis gelen mesajları eksiksiz okuyabilir ve WhatsApp'tan arka planda cevap gönderebilir.",
+                fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedButton(
+                onClick = { Permissions.open(context, Permissions.notificationAccessIntent()) },
+                modifier = Modifier.padding(top = 6.dp),
+            ) { Text("Bildirim erişimi ayarı") }
+
             SectionTitle("Diğer")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onSetup) { Text("Kurulum sihirbazı") }

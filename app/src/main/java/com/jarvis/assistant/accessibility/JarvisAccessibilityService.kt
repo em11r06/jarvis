@@ -186,6 +186,13 @@ class JarvisAccessibilityService : AccessibilityService() {
 
     fun global(action: Int): Boolean = performGlobalAction(action)
 
+    /** Ön plandaki uygulamanın paket adı (Jarvis değilse). */
+    fun foregroundPackage(): String? = rootInActiveWindow?.packageName?.toString()
+
+    /** Görünen pencerelerde kimliği (viewId) verilen ilk öğe. */
+    fun findById(viewId: String): AccessibilityNodeInfo? =
+        roots().firstNotNullOfOrNull { it.second.findAccessibilityNodeInfosByViewId(viewId).firstOrNull { n -> n.isVisibleToUser } }
+
     companion object {
         @Volatile
         var instance: JarvisAccessibilityService? = null

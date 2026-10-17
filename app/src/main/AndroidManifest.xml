@@ -23,6 +23,8 @@
     <!-- Android 11+ paket görünürlüğü: TTS motorları, ses tanıma ve başlatılabilir uygulamalar -->
     <queries>
         <package android:name="com.spotify.music" />
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
         <package android:name="com.google.android.apps.maps" />
         <intent>
             <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
@@ -92,6 +94,17 @@
             android:name=".wake.WakeWordService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+
+        <!-- Bildirim dinleyici: gelen mesajların kaydı ve bildirimden yanıt -->
+        <service
+            android:name=".notify.JarvisNotificationService"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
 
         <!-- Güncelleme APK'sını kurulum ekranına vermek için -->
         <provider

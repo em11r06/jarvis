@@ -27,6 +27,12 @@ object Permissions {
         }
     }
 
+    /** Jarvis'in bildirimleri okuma (mesaj kaydı, bildirimden yanıt) izni var mı? */
+    fun notificationAccess(ctx: Context): Boolean =
+        androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(ctx).contains(ctx.packageName)
+
+    fun notificationAccessIntent() = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+
     fun overlayIntent(ctx: Context) =
         Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${ctx.packageName}"))
 

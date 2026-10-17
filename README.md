@@ -110,6 +110,13 @@ bunu GitHub Actions önbelleğinde tutar (depoya girmez), yani derlemeler arası
 sonraki ilk güncellemede imza değişeceği için Jarvis'i **bir kez kaldırıp** yeniden kurman gerekir
 (geçmiş ve ayarlar silinir).
 
+### Mesajlar (bildirim erişimi)
+Jarvis Ayarlar > **Mesajlar** > Bildirim erişimi ayarı > Jarvis'i aç. (Kısıtlı ayarlar izni verildiyse açılır.)
+- Gelen mesaj bildirimleri telefonda kaydedilir (son 7 gün); "sabah altıdan beri gelen mesajları oku" eksiksiz çalışır.
+  Sadece izin açıldıktan sonra gelen mesajlar görülebilir.
+- WhatsApp mesajı: o kişiden bekleyen bildirim varsa bildirimin "Yanıtla"sıyla **tamamen arka planda** gönderilir;
+  yoksa sohbet mesaj yazılı açılır, gönder'e basılır ve önceki uygulamaya dönülür (1-2 sn, klavye gerekmez).
+
 ## 5. Kullanım örnekleri
 
 - "Jarvis... nasılsın?" (sohbet)
