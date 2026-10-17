@@ -116,14 +116,16 @@ class AssistantController(
                 var timeout = FIRST_LISTEN_MS
                 while (true) {
                     _state.value = AssistantState.LISTENING
-                    val heard = listener.listen(timeout) { _partial.value = it }
+                    listener.hints = kotlinx.coroutines.withContext(Dispatchers.IO) { SpeechHints.get(context) }
+                    val heardFull = listener.listen(timeout) { _partial.value = it }
+                    val heard = heardFull?.text
                     _partial.value = ""
                     if (heard.isNullOrBlank()) break
                     if (isStopWord(heard)) {
                         addBubble(ChatBubble(true, heard))
                         break
                     }
-                    handle(heard)
+                    handle(heard, withAlternatives(heardFull!!))
                     val follow = settings.followUpSeconds
                     if (follow <= 0) break
                     timeout = follow * 1000L
@@ -139,7 +141,18 @@ class AssistantController(
     }
 
     /** Tek bir isteği işler: yapay zekaya sorar ve cevabı okur. */
-    private suspend fun handle(text: String) {
+    /**
+     * Tanıyıcı emin değilse diğer tahminleri yapay zekaya not olarak ekler;
+     * yapay zeka bağlama göre doğru olanı seçer. Ekranda sadece en olası metin görünür.
+     */
+    private fun withAlternatives(h: com.jarvis.assistant.speech.Heard): String {
+        val alts = h.alternatives.filter { !it.equals(h.text, ignoreCase = true) }.take(3)
+        val unsure = h.confidence == null || h.confidence < 0.85f
+        if (alts.isEmpty() || !unsure) return h.text
+        return h.text + "\n[Ses tanıma emin değil; olası alternatifler: " + alts.joinToString(" | ") + ". Bağlama göre doğrusunu seç.]"
+    }
+
+    private suspend fun handle(text: String, forAi: String = text) {
         addBubble(ChatBubble(true, text))
         _state.value = AssistantState.THINKING
         val answer = try {
@@ -152,7 +165,7 @@ class AssistantController(
                 return finish(reply)
             }
             agent.ask(
-                text,
+                forAi,
                 onToolUse = { name -> _partial.value = "⚙ $name" },
                 onInterimText = { interim ->
                     addBubble(ChatBubble(false, interim))

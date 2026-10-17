@@ -11,11 +11,29 @@ import android.speech.SpeechRecognizer
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
+/** Tanınan konuşma: en olası metin ve diğer tahminler. */
+data class Heard(val text: String, val alternatives: List<String>, val confidence: Float?)
+
 /**
  * Android SpeechRecognizer ile Türkçe (tr-TR) konuşma tanıma.
  * listen() kullanıcı konuşup susunca tanınan metni, konuşmazsa null döndürür.
  */
 class SpeechListener(private val context: Context) {
+
+    /** Tanıyıcıya ipucu olarak verilen kelimeler (rehberdeki isimler, uygulama adları...). */
+    @Volatile
+    var hints: List<String> = emptyList()
+
+    /** Türkçede daha iyi olduğu için varsa Google'ın ses tanıyıcısını tercih et. */
+    private fun createRecognizer(): SpeechRecognizer {
+        val google = runCatching {
+            context.packageManager.queryIntentServices(Intent(android.speech.RecognitionService.SERVICE_INTERFACE), 0)
+                .firstOrNull { it.serviceInfo.packageName == "com.google.android.googlequicksearchbox" }
+                ?.serviceInfo?.let { android.content.ComponentName(it.packageName, it.name) }
+        }.getOrNull()
+        return if (google != null) SpeechRecognizer.createSpeechRecognizer(context, google)
+        else SpeechRecognizer.createSpeechRecognizer(context)
+    }
 
     private val main = Handler(Looper.getMainLooper())
     private var recognizer: SpeechRecognizer? = null
@@ -26,13 +44,13 @@ class SpeechListener(private val context: Context) {
      * @param startTimeoutMs bu süre içinde konuşma başlamazsa dinlemeyi bırakır
      * @param onPartial konuşurken ara sonuçlar (ekranda göstermek için)
      */
-    suspend fun listen(startTimeoutMs: Long, onPartial: (String) -> Unit = {}): String? =
+    suspend fun listen(startTimeoutMs: Long, onPartial: (String) -> Unit = {}): Heard? =
         suspendCancellableCoroutine { cont ->
             main.post {
-                val r = recognizer ?: SpeechRecognizer.createSpeechRecognizer(context).also { recognizer = it }
+                val r = recognizer ?: createRecognizer().also { recognizer = it }
                 var started = false
                 var finished = false
-                fun finish(value: String?) {
+                fun finish(value: Heard?) {
                     if (finished) return
                     finished = true
                     main.removeCallbacksAndMessages(TIMEOUT_TOKEN)
@@ -53,8 +71,10 @@ class SpeechListener(private val context: Context) {
                     override fun onEndOfSpeech() {}
                     override fun onError(error: Int) { finish(null) }
                     override fun onResults(results: Bundle?) {
-                        val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-                        finish(text?.takeIf { it.isNotBlank() })
+                        val all = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
+                            .filter { it.isNotBlank() }
+                        val conf = results?.getFloatArray(SpeechRecognizer.CONFIDENCE_SCORES)?.firstOrNull()?.takeIf { it >= 0f }
+                        finish(all.firstOrNull()?.let { Heard(it, all.drop(1).distinct().take(4), conf) })
                     }
                     override fun onPartialResults(partialResults: Bundle?) {
                         partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
@@ -71,14 +91,19 @@ class SpeechListener(private val context: Context) {
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE, "tr-TR")
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "tr-TR")
                     putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                    // Birkaç tahmin al; emin olunmazsa yapay zeka bağlama göre doğrusunu seçer.
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
+                    // Rehberdeki isimler, uygulama adları gibi kelimeleri doğru yazması için ipucu (Android 13+).
+                    if (android.os.Build.VERSION.SDK_INT >= 33 && hints.isNotEmpty()) {
+                        putStringArrayListExtra(RecognizerIntent.EXTRA_BIASING_STRINGS, ArrayList(hints.take(500)))
+                    }
                     // İnternet yoksa telefondaki çevrimdışı Türkçe modeli kullan.
                     if (!com.jarvis.assistant.core.Network.isOnline(context)) {
                         putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
                     }
-                    // Sustuktan sonra daha kısa bekle (tanıyıcı destekliyorsa).
-                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 900L)
-                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 700L)
+                    // Cümle arasındaki kısa duraklamalarda kesmesin (tanıyıcı destekliyorsa).
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1200L)
                     putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
                 }
                 try {
