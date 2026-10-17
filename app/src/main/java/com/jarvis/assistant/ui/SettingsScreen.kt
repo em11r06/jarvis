@@ -79,7 +79,7 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
             val n = StyleLearner.import(context, uris)
             senders = StyleLearner.senders(context)
             if (styleOwner.isBlank()) styleOwner = senders.firstOrNull()?.first.orEmpty()
-            styleStatus = if (n == 0) "Dosyada mesaj bulunamadı. WhatsApp'tan 'Sohbeti dışa aktar' ile alınan .txt dosyası olmalı." else "$n mesaj yüklendi."
+            styleStatus = if (n == 0) "Dosyada mesaj bulunamadı. WhatsApp dışa aktarma (.txt/.zip) ya da Instagram bilgi indirme ZIP'i olmalı." else "$n mesaj yüklendi."
         }
     }
     var threshold by remember { mutableFloatStateOf(s.voiceThreshold) }
@@ -272,8 +272,9 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
 
             SectionTitle("Konuşma tarzım")
             Text(
-                "WhatsApp'ta bir sohbette ⋮ > Diğer > Sohbeti dışa aktar > Medya olmadan deyip dosyayı buraya yükleyin " +
-                    "(ya da paylaş menüsünden Jarvis'i seçin). Jarvis sadece SİZİN mesajlarınızı analiz edip sizin gibi konuşur.",
+                "WhatsApp: sohbette ⋮ > Diğer > Sohbeti dışa aktar > Medya olmadan. Instagram: Hesap Merkezi > Bilgilerin ve izinlerin > " +
+                    "Bilgilerini indir (Mesajlar, tercihen JSON) ile gelen ZIP. Dosyayı buraya yükleyin ya da paylaş menüsünden Jarvis'i seçin. " +
+                    "Jarvis sadece SİZİN mesajlarınızı analiz edip sizin gibi konuşur.",
                 fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {

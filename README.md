@@ -138,7 +138,8 @@ yapay zeka (Gemini Nano) desteği planlanıyor.
 
 ### Konuşma tarzım
 WhatsApp'ta sohbet > ⋮ > Diğer > **Sohbeti dışa aktar** > **Medya olmadan** > paylaş menüsünden **Jarvis**
-(ya da Ayarlar > Konuşma tarzım > Sohbet yükle). Birkaç sohbet yükle, "Hangisi sizsiniz?" altından kendi adını seç,
+(ya da Ayarlar > Konuşma tarzım > Sohbet yükle). Instagram için: Ayarlar > Hesap Merkezi > Bilgilerin ve izinlerin >
+**Bilgilerini indir** > Cihaza indir > sadece **Mesajlar**, biçim **JSON** (HTML de olur) > gelen ZIP'i Jarvis'e yükle. Birkaç sohbet yükle, "Hangisi sizsiniz?" altından kendi adını seç,
 **Tarzımı analiz et** de. Yapay zekaya **sadece senin mesajların** gönderilir; çıkan rehber Ayarlar'da düzenlenebilir
 ve Jarvis seninle o tarzda konuşur. Yüklenen sohbetler sadece telefonda saklanır, istendiğinde silinir.
 

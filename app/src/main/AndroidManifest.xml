@@ -83,6 +83,8 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
                 <data android:mimeType="application/zip" />
+                <data android:mimeType="application/json" />
+                <data android:mimeType="text/html" />
             </intent-filter>
         </activity>
 

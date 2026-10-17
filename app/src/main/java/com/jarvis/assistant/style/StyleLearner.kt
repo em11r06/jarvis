@@ -15,7 +15,7 @@ import java.util.zip.ZipInputStream
 data class ChatLine(val sender: String, val text: String)
 
 /**
- * WhatsApp "Sohbeti dışa aktar" dosyalarından kullanıcının kendi mesajlarını ayıklar ve
+ * WhatsApp ve Instagram sohbet dökümlerinden kullanıcının kendi mesajlarını ayıklar ve
  * yapay zekaya konuşma tarzını analiz ettirir. Karşı tarafın mesajları yapay zekaya gönderilmez.
  */
 object StyleLearner {
@@ -32,13 +32,17 @@ object StyleLearner {
         "çıkartma dahil edilmedi", "sticker omitted", "<bu mesaj düzenlendi>", "null",
     )
 
-    /** Seçilen dosyaları (txt ya da zip) okur, mevcut kayda ekler. @return eklenen mesaj sayısı */
+    /**
+     * Seçilen dosyaları okur, mevcut kayda ekler. Desteklenenler:
+     * WhatsApp dışa aktarma (.txt ya da .zip), Instagram "bilgilerini indir" (.zip içinde
+     * messages/inbox/.../message_N.json ya da .html), tek tek .json/.html dosyaları.
+     * @return eklenen mesaj sayısı
+     */
     suspend fun import(ctx: Context, uris: List<Uri>): Int = withContext(Dispatchers.IO) {
         val all = load(ctx).toMutableList()
         var added = 0
         for (uri in uris) {
-            val text = readText(ctx, uri) ?: continue
-            val lines = parse(text)
+            val lines = runCatching { readChats(ctx, uri) }.getOrDefault(emptyList())
             all += lines
             added += lines.size
         }
@@ -46,26 +50,94 @@ object StyleLearner {
         added
     }
 
-    private fun readText(ctx: Context, uri: Uri): String? = runCatching {
+    private fun readChats(ctx: Context, uri: Uri): List<ChatLine> {
         val name = ctx.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
             if (c.moveToFirst()) c.getString(0) else null
         }.orEmpty()
         val type = ctx.contentResolver.getType(uri).orEmpty()
-        ctx.contentResolver.openInputStream(uri)?.use { input ->
+        val input = ctx.contentResolver.openInputStream(uri) ?: return emptyList()
+        return input.use { ins ->
             if (name.endsWith(".zip", true) || type.contains("zip")) {
-                // WhatsApp bazen .zip içinde .txt verir.
-                val zip = ZipInputStream(input)
+                val out = mutableListOf<ChatLine>()
+                val zip = ZipInputStream(ins.buffered())
                 var entry = zip.nextEntry
                 while (entry != null) {
-                    if (entry.name.endsWith(".txt", true)) return@runCatching zip.readBytes().toString(Charsets.UTF_8)
+                    val n = entry.name.lowercase()
+                    val isWa = n.endsWith(".txt")
+                    val isIg = (n.contains("messages/") || n.contains("inbox/")) && Regex("message_\\d+\\.(json|html)$").containsMatchIn(n)
+                    if (!entry.isDirectory && (isWa || isIg)) {
+                        val bytes = readLimited(zip, 8_000_000)
+                        out += parseByName(n, bytes.toString(Charsets.UTF_8))
+                    }
                     entry = zip.nextEntry
                 }
-                null
+                out
             } else {
-                input.readBytes().toString(Charsets.UTF_8)
+                parseByName(name.lowercase(), ins.readBytes().toString(Charsets.UTF_8))
             }
         }
-    }.getOrNull()
+    }
+
+    private fun readLimited(zip: ZipInputStream, max: Int): ByteArray {
+        val buf = java.io.ByteArrayOutputStream()
+        val tmp = ByteArray(64 * 1024)
+        while (buf.size() < max) {
+            val r = zip.read(tmp)
+            if (r < 0) break
+            buf.write(tmp, 0, r)
+        }
+        return buf.toByteArray()
+    }
+
+    private fun parseByName(name: String, text: String): List<ChatLine> = when {
+        name.endsWith(".json") -> parseInstagramJson(text)
+        name.endsWith(".html") || name.endsWith(".htm") -> parseInstagramHtml(text)
+        else -> parse(text)
+    }
+
+    /** Instagram JSON: {"messages":[{"sender_name":..,"content":..}]} */
+    fun parseInstagramJson(text: String): List<ChatLine> {
+        val arr = runCatching { JSONObject(text).optJSONArray("messages") }.getOrNull() ?: return emptyList()
+        return (0 until arr.length()).mapNotNull { i ->
+            val o = arr.getJSONObject(i)
+            val content = o.optString("content").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            ChatLine(fixMojibake(o.optString("sender_name")), fixMojibake(content))
+        }.reversed() // Instagram yeniden eskiye verir
+            .filter { l -> IG_SKIP.none { l.text.contains(it, ignoreCase = true) } }
+    }
+
+    /** Instagram HTML: her mesaj bir kutu; ilk çocuk gönderen, ikincisi içerik. */
+    fun parseInstagramHtml(text: String): List<ChatLine> {
+        val doc = org.jsoup.Jsoup.parse(text)
+        val blocks = doc.select("div.uiBoxWhite, div._a6-g").distinct()
+        return blocks.mapNotNull { b ->
+            val kids = b.children()
+            if (kids.size < 2) return@mapNotNull null
+            val sender = kids[0].text().trim()
+            val content = kids[1].text().trim()
+            if (sender.isBlank() || content.isBlank() || sender.length > 60) null else ChatLine(sender, content)
+        }.reversed()
+            .filter { l -> IG_SKIP.none { l.text.contains(it, ignoreCase = true) } }
+    }
+
+    /**
+     * Instagram JSON'unda Türkçe karakterler bozuk gelir ("Ã¼" gibi): UTF-8 baytlar tek tek
+     * karakter olarak yazılmış. Baytlara geri çevirip doğru çözüyoruz.
+     */
+    private fun fixMojibake(s: String): String {
+        if (s.none { it.code in 0x80..0xFF }) return s
+        if (s.any { it.code > 0xFF }) return s
+        return runCatching {
+            val bytes = ByteArray(s.length) { s[it].code.toByte() }
+            String(bytes, Charsets.UTF_8)
+        }.getOrDefault(s)
+    }
+
+    private val IG_SKIP = listOf(
+        "sent an attachment", "bir ek gönderdi", "liked a message", "bir mesajı beğendi", "reacted", "tepki verdi",
+        "shared a story", "bir hikaye paylaştı", "sent a voice message", "sesli mesaj gönderdi", "started a video chat",
+        "görüntülü sohbet", "missed", "cevapsız", "this message was unsent", "mesajı geri aldı",
+    )
 
     fun parse(text: String): List<ChatLine> {
         val out = mutableListOf<ChatLine>()
