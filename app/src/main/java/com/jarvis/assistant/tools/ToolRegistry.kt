@@ -11,6 +11,7 @@ object ToolRegistry {
         // Uygulamalar ve medya
         UygulamaAcTool(),
         SarkiCalTool(),
+        YoutubeAcTool(),
         MedyaKontrolTool(),
         SesAyarlaTool(),
         HaritaAcTool(),

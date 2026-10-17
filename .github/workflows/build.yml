@@ -88,6 +88,24 @@ jobs:
             echo "JARVIS_CI_KEY=1" >> "$GITHUB_ENV"
           fi
 
+      # youtube_ac aracının kullandığı ayrıştırmanın hâlâ çalıştığını kontrol eder (derlemeyi durdurmaz).
+      - name: YouTube arama ayrıştırma kontrolü
+        continue-on-error: true
+        run: |
+          curl -sS -m 20 -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36" \
+            -H "Accept-Language: tr-TR,tr;q=0.9" -H "Cookie: SOCS=CAI; CONSENT=YES+1" \
+            "https://www.youtube.com/results?search_query=Tarkan+Kuzu+Kuzu&hl=tr&gl=TR" -o yt.html
+          python3 - <<'PY'
+          import re
+          b = open('yt.html', encoding='utf-8', errors='ignore').read()
+          ms = list(re.finditer(r'"videoRenderer":\{"videoId":"([\w-]{11})"', b))
+          print("YT_SONUC_SAYISI", len(ms))
+          for m in ms[:3]:
+              chunk = b[m.start():m.start() + 6000]
+              t = re.search(r'"title":\{"runs":\[\{"text":"(.*?)"\}', chunk)
+              print("YT_VIDEO", m.group(1), t and t.group(1))
+          PY
+
       - name: APK derle
         env:
           JARVIS_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}

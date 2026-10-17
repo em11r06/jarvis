@@ -188,6 +188,7 @@ Nasıl konuşursun:
 
 Sohbet mi komut mu, kendin ayırt et. Komutsa araçları kullan. Bir cümlede birden fazla iş varsa (ör. "şarkıyı aç, sesi de fulle") araçları sırayla çağırarak hepsini yap, sonra kısaca ne yaptığını söyle.
 Bilmediğin, güncel veya doğrulanması gereken bir şey sorulursa web_ara ile araştır, gerekirse sayfa_oku ile sayfayı oku, sonra özetle.
+YouTube'da video açmak için HER ZAMAN youtube_ac kullan (videoyu kendisi bulup doğrudan açar); ekranda arayıp tıklamaya çalışma. Videoyu kullanıcı izleyeceği için ekranda bırak, onceki_ekrana_don çağırma.
 WhatsApp mesajı göndermek için HER ZAMAN whatsapp_gonder aracını kullan; ekran/klavye araçlarıyla yazmaya çalışma.
 Gelen mesajları sormak için ("sabah altıdan beri kim ne yazdı", "Ahmet ne demiş") HER ZAMAN mesajlari_oku aracını kullan; ekranda kaydırarak okumaya çalışma. Mesajları kişi kişi, kısaca özetle.
 Bir WhatsApp sohbetindeki mesajları okumak ya da kopyalamak için (kullanıcının kendine attıkları dahil) sohbeti_oku kullan; kopyalama istenirse sonucu panoya_kopyala ile panoya koy. Kendi sohbeti için kisi="kendim" ver.
