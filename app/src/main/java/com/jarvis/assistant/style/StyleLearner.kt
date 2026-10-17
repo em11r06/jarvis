@@ -43,8 +43,11 @@ object StyleLearner {
         var added = 0
         for (uri in uris) {
             val lines = runCatching { readChats(ctx, uri) }.getOrDefault(emptyList())
-            all += lines
-            added += lines.size
+            // Aynı dosya tekrar yüklenirse mesajlar iki kez sayılmasın.
+            val seen = all.mapTo(HashSet()) { it.sender + "\u0000" + it.text }
+            val fresh = lines.filter { seen.add(it.sender + "\u0000" + it.text) }
+            all += fresh
+            added += fresh.size
         }
         save(ctx, all.takeLast(30000))
         added
@@ -178,8 +181,12 @@ object StyleLearner {
      * Kullanıcının mesajlarından konuşma tarzı rehberi çıkarır ve ayarlara kaydeder.
      * Sadece kullanıcının kendi mesajları yapay zekaya gönderilir.
      */
+    /**
+     * @param me kullanıcının sohbetlerdeki adları (WhatsApp ve Instagram'da farklı olabilir), virgülle ayrılmış
+     */
     suspend fun analyze(ctx: Context, me: String): String {
-        val mine = load(ctx).filter { it.sender == me }.map { it.text.replace("\n", " ") }
+        val names = me.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+        val mine = load(ctx).filter { it.sender in names }.map { it.text.replace("\n", " ") }
         if (mine.size < 20) return "Analiz için en az 20 mesajınız olmalı (şu an ${mine.size})."
         // Farklı sohbetlerden çeşitli örnekler: en fazla ~12 bin karakter.
         val sample = StringBuilder()

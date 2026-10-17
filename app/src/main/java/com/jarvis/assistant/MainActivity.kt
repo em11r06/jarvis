@@ -116,7 +116,7 @@ class MainActivity : ComponentActivity() {
             }
             if (uris.isNotEmpty()) lifecycleScope.launch {
                 val n = com.jarvis.assistant.style.StyleLearner.import(this@MainActivity, uris)
-                val msg = if (n == 0) "Dosyada sohbet bulunamadı." else "$n mesaj yüklendi. Ayarlar > Konuşma tarzım'dan analiz edin."
+                val msg = if (n == 0) "Yeni mesaj bulunamadı (dosya zaten yüklenmiş olabilir)." else "$n mesaj yüklendi. Ayarlar > Konuşma tarzım'dan analiz edin."
                 android.widget.Toast.makeText(this@MainActivity, msg, android.widget.Toast.LENGTH_LONG).show()
             }
         }

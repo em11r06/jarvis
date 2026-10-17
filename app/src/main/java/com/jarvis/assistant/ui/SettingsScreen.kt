@@ -80,7 +80,7 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
             val n = StyleLearner.import(context, uris)
             senders = StyleLearner.senders(context)
             if (styleOwner.isBlank()) styleOwner = senders.firstOrNull()?.first.orEmpty()
-            styleStatus = if (n == 0) "Dosyada mesaj bulunamadı. WhatsApp dışa aktarma (.txt/.zip) ya da Instagram bilgi indirme ZIP'i olmalı." else "$n mesaj yüklendi."
+            styleStatus = if (n == 0) "Yeni mesaj bulunamadı. Dosya zaten yüklenmiş olabilir; değilse WhatsApp dışa aktarma (.txt/.zip) ya da Instagram bilgi indirme ZIP'i olmalı." else "$n mesaj yüklendi."
         }
     }
     var threshold by remember { mutableFloatStateOf(s.voiceThreshold) }
@@ -301,13 +301,19 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
                 }) { Text("Sohbetleri sil") }
             }
             if (senders.isNotEmpty()) {
-                Text("Hangisi sizsiniz?", fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.onSurface)
+                Text("Hangileri sizsiniz? (birden fazla seçebilirsiniz)", fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.onSurface)
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                 ) {
                     senders.take(8).forEach { (name, count) ->
-                        FilterChip(styleOwner == name, { styleOwner = name }, { Text("$name ($count)") })
+                        // Birden fazla ad seçilebilir (WhatsApp ve Instagram'daki adlarınız farklıysa).
+                        val selected = name in ownerSet(styleOwner)
+                        FilterChip(selected, {
+                            val set = ownerSet(styleOwner).toMutableSet()
+                            if (selected) set.remove(name) else set.add(name)
+                            styleOwner = set.joinToString(",")
+                        }, { Text("$name ($count)") })
                     }
                 }
                 Button(
@@ -369,3 +375,6 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
         )
     }
 }
+
+/** Seçili adlar ("Ali,ali_insta") kümesi. */
+private fun ownerSet(s: String): Set<String> = s.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
