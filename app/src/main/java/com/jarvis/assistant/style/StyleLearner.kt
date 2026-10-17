@@ -240,6 +240,10 @@ object StyleLearner {
     // Takip edilen hesaplar (Instagram)
     // ------------------------------------------------------------------
 
+    /** Son analizde hangi addan kaç mesaj kullanıldığı (ekranda göstermek için). */
+    @Volatile
+    var lastUsage = ""
+
     /** Son içe aktarmada eklenen takip edilen hesap sayısı (ekranda göstermek için). */
     @Volatile
     var lastFollowingCount = 0
@@ -291,16 +295,32 @@ object StyleLearner {
      */
     suspend fun analyze(ctx: Context, me: String): String {
         val names = me.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
-        val mine = load(ctx).filter { it.sender in names && !it.shared }.map { it.text.replace("\n", " ") }
-        if (mine.size < 20) return "Analiz için en az 20 mesajınız olmalı (şu an ${mine.size})."
-        // Farklı sohbetlerden çeşitli örnekler: en fazla ~12 bin karakter.
-        val sample = StringBuilder()
-        val step = maxOf(1, mine.size / 600)
-        for (i in mine.indices step step) {
-            val m = mine[i].take(300)
-            if (sample.length + m.length > 12000) break
-            sample.append("- ").append(m).append('\n')
+        val mineLines = load(ctx).filter { it.sender in names && !it.shared }
+        if (mineLines.size < 20) return "Analiz için en az 20 mesajınız olmalı (şu an ${mineLines.size})."
+        // Her ad (WhatsApp adı, Instagram adı...) için eşit pay ayır ve her birinin tamamından eşit aralıklı örnek al;
+        // böylece bir platformun mesajları diğerini bastırmaz, ikisi harmanlanır.
+        val groups = mineLines.groupBy { it.sender }.mapValues { (_, v) -> v.map { it.text.replace("\n", " ") } }
+        val perGroup = 12000 / groups.size
+        val used = mutableMapOf<String, Int>()
+        val picked = mutableListOf<String>()
+        for ((name, msgs) in groups) {
+            val budgetCount = minOf(msgs.size, maxOf(20, perGroup / 40))
+            val step = msgs.size.toDouble() / budgetCount
+            var chars = 0
+            var count = 0
+            var i = 0.0
+            while (i < msgs.size && chars < perGroup) {
+                val m = msgs[i.toInt()].take(300)
+                picked += m
+                chars += m.length + 3
+                count++
+                i += step
+            }
+            used[name] = count
         }
+        val sample = StringBuilder()
+        picked.shuffled().forEach { sample.append("- ").append(it).append('\n') }
+        lastUsage = used.entries.joinToString(", ") { "${it.key}: ${it.value} mesaj" }
         // Güldüğü espriler ve paylaştığı içerikler (mizah tarzı için).
         val all = load(ctx)
         val funny = funnyForMe(all, names).shuffled().fold(StringBuilder()) { b, t ->
@@ -320,7 +340,7 @@ object StyleLearner {
         }
         val system = "Sen bir dil ve üslup analistisin. Türkçe yaz."
         val prompt = """
-Aşağıda bir kişinin WhatsApp/Instagram'da yazdığı mesajlardan örnekler var. Bu kişinin konuşma tarzını analiz et ve
+Aşağıda AYNI kişinin WhatsApp ve Instagram'da (farklı platformlarda) yazdığı mesajlardan karışık örnekler var; ikisini harmanlayıp tek bir tarz çıkar. Bu kişinin konuşma tarzını analiz et ve
 bir sesli asistanın onunla AYNI TARZDA konuşabilmesi için kısa bir "konuşma tarzı rehberi" yaz.
 
 Şunlara bak: hitap şekilleri, sık kullandığı kelime ve kalıplar, argo/kısaltmalar, cümle uzunluğu, resmiyet düzeyi,

@@ -326,7 +326,7 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
                             styleStatus = try {
                                 val g = StyleLearner.analyze(context, styleOwner)
                                 styleGuide = s.styleGuide
-                                if (g == styleGuide) "Konuşma tarzınız öğrenildi." else g
+                                if (g == styleGuide) "Konuşma tarzınız öğrenildi (${StyleLearner.lastUsage})." else g
                             } catch (e: Exception) {
                                 "Hata: ${e.message}"
                             }
