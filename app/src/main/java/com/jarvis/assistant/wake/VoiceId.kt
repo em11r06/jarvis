@@ -201,7 +201,8 @@ object VoiceId {
         val now = System.currentTimeMillis()
         val v = hit.voice
         val sim = if (v != null) score(settings, v, print) else -1f
-        val th = settings.voiceThreshold
+        // Kulaklıkla ses farklı mikrofondan/uzaktan gelir; ses izi daha az benzer çıkar, eşiği biraz gevşet.
+        val th = settings.voiceThreshold - if (com.jarvis.assistant.core.AudioRoute.headset(context)) HEADSET_SLACK else 0f
         if (sim >= th) {
             Log.d(TAG, "Ses benzerliği $sim (eşik $th) -> kabul")
             if (v != null && sim < th + 0.15f) learn(settings, v) // sınırdaki örnekler öğretici
@@ -332,6 +333,7 @@ object VoiceId {
 
     private const val TAG = "JarvisVoice"
     private const val NEAR_MARGIN = 0.12f
+    private const val HEADSET_SLACK = 0.1f
     private const val RETRY_WINDOW_MS = 7000L
     private const val MAX_SAMPLES = 24
     /** Öğrenme sırasında silinmeyecek ilk kayıt örneği sayısı. */
@@ -348,9 +350,14 @@ class MicLoop(
     private val recognizers: List<Recognizer>,
     private val onResult: (String) -> Unit,
     private val onError: (String) -> Unit,
+    /** Verilirse kayıt bu cihazın (ör. Bluetooth kulaklık) mikrofonundan yapılır. */
+    private val btMic: android.media.AudioDeviceInfo? = null,
+    private val context: Context? = null,
 ) {
     constructor(recognizer: Recognizer, onResult: (String) -> Unit, onError: (String) -> Unit) :
-        this(listOf(recognizer), onResult, onError)
+        this(listOf(recognizer), onResult, onError, null, null)
+
+    private var routedBt = false
 
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
     @Volatile private var running = false
@@ -367,6 +374,10 @@ class MicLoop(
             rate, android.media.AudioFormat.CHANNEL_IN_MONO, android.media.AudioFormat.ENCODING_PCM_16BIT,
         )
         val chunk = rate / 5 // 0,2 saniyelik parçalar
+        if (btMic != null && context != null) {
+            // Bluetooth kulaklığın mikrofonunu aç (kulaklık "görüşme" moduna geçer).
+            routedBt = runCatching { context.getSystemService(AudioManager::class.java).setCommunicationDevice(btMic) }.getOrDefault(false)
+        }
         val r = android.media.AudioRecord(
             // VOICE_COMMUNICATION: telefonun yankı engelleme ve gürültü azaltma işlemini açar.
             android.media.MediaRecorder.AudioSource.VOICE_COMMUNICATION,
@@ -417,5 +428,9 @@ class MicLoop(
         runCatching { ns?.release() }
         aec = null
         ns = null
+        if (routedBt && context != null) {
+            runCatching { context.getSystemService(AudioManager::class.java).clearCommunicationDevice() }
+            routedBt = false
+        }
     }
 }

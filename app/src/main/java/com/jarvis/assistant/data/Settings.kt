@@ -46,6 +46,10 @@ class Settings(context: Context) {
     var wakeGreeting by bool("wake_greeting", true)
     /** Uyandırma kelimeleri, virgülle ayrılmış (ör. "jarvis, can"). */
     var wakeWords by str("wake_words", "jarvis")
+    /** Jarvis konuşurken uyandırma kelimesiyle sözünü kesebilme. */
+    var bargeIn by bool("barge_in", true)
+    /** Bluetooth kulaklık takılıyken kulaklığın mikrofonuyla dinle (müzik kalitesi düşer). */
+    var headsetMic by bool("headset_mic", false)
     /** Uyanınca ne yapsın: WAKE_SPEAK (söz), WAKE_BEEP, WAKE_FILE (seçilen ses dosyası), WAKE_SILENT. */
     var wakeSound: String
         get() = prefs.getString("wake_sound", null) ?: if (wakeGreeting) WAKE_SPEAK else WAKE_BEEP

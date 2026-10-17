@@ -157,6 +157,10 @@ bırakıp yer açar, **Sohbetleri sil** hepsini siler. Çıkan rehber Ayarlar'da
   ayarına ve mesafeye göre kendisi ayarlar. Dokunuştan sonra ekran değişmezse biraz daha uzun bir kez daha dokunur.
 
 ### Uyanma sesi ve ses tanıma
+**Sözünü kesmek:** Jarvis konuşurken uyandırma kelimesini söyle; susar ve seni dinler (Ayarlar'dan kapatılabilir).
+**Kulaklıkla:** Kulaklık takılıyken ses kimliği eşiği biraz gevşer. Yine duymazsa "Bluetooth kulaklığın mikrofonunu kullan"ı aç
+(kulaklık görüşme moduna geçtiği için müzik kalitesi düşer).
+
 **Uyandırma kelimesi:** Ayarlar > Uyandırma kelimesi'ne istediğin kelimeleri virgülle yaz (ör. `jarvis, can, hey x`).
 İngilizce kelimeler hazır modelle çalışır. Türkçe kelimeler için **Türkçe modeli indir**'e bir kez bas (~35 MB, telefona iner).
 **Dene** ile kelimeyi söyle: yakalanıp yakalanmadığını ve ne duyduğunu gösterir. Tanımazsa okunduğu gibi yaz (X için "iks").

@@ -43,6 +43,10 @@ class AssistantController(
     val speaker = Speaker(context, settings)
     private val listener = SpeechListener(context)
     private val busy = Mutex()
+    /** Sesli oturum sürüyor mu (araya girme sadece o sırada dinlenir). */
+    @Volatile private var inVoiceSession = false
+    /** Son konuşma kullanıcı tarafından kesildi mi? */
+    @Volatile private var barged = false
     private var sessionJob: Job? = null
 
     /** Uyandırma servisi bunları ayarlar: dinlemeden önce mikrofonu bırakır, sonra geri alır. */
@@ -135,6 +139,7 @@ class AssistantController(
         busy.withLock {
             // Dinlerken müziği/videoyu kıs ki kullanıcıyı net duyalım.
             speaker.acquireFocus()
+            inVoiceSession = true
             try {
                 var timeout = FIRST_LISTEN_MS
                 while (true) {
@@ -148,12 +153,16 @@ class AssistantController(
                         addBubble(ChatBubble(true, heard))
                         break
                     }
+                    barged = false
                     handle(heard, withAlternatives(heardFull!!))
+                    // Sözü kesildiyse hemen dinlemeye geç.
+                    if (barged) { timeout = FIRST_LISTEN_MS; continue }
                     val follow = settings.followUpSeconds
                     if (follow <= 0) break
                     timeout = follow * 1000L
                 }
             } finally {
+                inVoiceSession = false
                 _partial.value = ""
                 _state.value = AssistantState.IDLE
                 listener.release()
@@ -194,7 +203,7 @@ class AssistantController(
                 onInterimText = { interim ->
                     addBubble(ChatBubble(false, interim))
                     _state.value = AssistantState.SPEAKING
-                    speaker.speak(interim)
+                    speakVoice(interim)
                     _state.value = AssistantState.THINKING
                 },
             )
@@ -228,7 +237,33 @@ class AssistantController(
         _partial.value = ""
         addBubble(ChatBubble(false, answer))
         _state.value = AssistantState.SPEAKING
-        speaker.speak(answer)
+        speakVoice(answer)
+    }
+
+    /**
+     * Sesli okur. Sesli oturumdaysa okurken uyandırma kelimesini de dinler;
+     * kullanıcı araya girerse konuşmayı keser (barged = true).
+     */
+    private suspend fun speakVoice(text: String) {
+        // Kullanıcı bu istekte zaten araya girdiyse kalan konuşmaları okuma.
+        if (barged) return
+        if (!inVoiceSession || !settings.bargeIn) {
+            speaker.speak(text)
+            return
+        }
+        kotlinx.coroutines.coroutineScope {
+            val speaking = launch { speaker.speak(text) }
+            val barge = com.jarvis.assistant.wake.BargeIn.start(context, settings, text) {
+                barged = true
+                speaking.cancel()
+                speaker.stop()
+            }
+            try {
+                speaking.join()
+            } finally {
+                barge?.stop()
+            }
+        }
     }
 
     fun clearHistory() {

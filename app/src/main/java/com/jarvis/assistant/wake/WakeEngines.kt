@@ -102,7 +102,8 @@ class VoskEngine(
                 trModel?.let { VoskModels.recognizer(it, speaker, phrases, english = false) },
             )
             recognizers = recs
-            loop = MicLoop(recs, ::onResult) { msg -> onFail("Uyandırma hatası: $msg") }.also { it.start() }
+            val bt = if (settings.headsetMic) com.jarvis.assistant.core.AudioRoute.bluetoothMic(context) else null
+            loop = MicLoop(recs, ::onResult, { msg -> onFail("Uyandırma hatası: $msg") }, bt, context).also { it.start() }
         } catch (e: Exception) {
             loop = null
             onFail("Mikrofon açılamadı: ${e.message}")

@@ -68,6 +68,8 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
     var wake by remember { mutableStateOf(s.wakeEnabled) }
     var wakeSound by remember { mutableStateOf(s.wakeSound) }
     var wakeWords by remember { mutableStateOf(s.wakeWords) }
+    var bargeIn by remember { mutableStateOf(s.bargeIn) }
+    var headsetMic by remember { mutableStateOf(s.headsetMic) }
     var wordsChanged by remember { mutableStateOf(false) }
     var testingWake by remember { mutableStateOf(false) }
     var hasTr by remember { mutableStateOf(com.jarvis.assistant.wake.VoskModels.hasTurkish(context)) }
@@ -272,6 +274,28 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
                     onClick = { scope.launch { WakeWordService.playWakeSound(context) } },
                     modifier = Modifier.padding(top = 4.dp),
                 ) { Text("Dene") }
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 10.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text("Konuşurken sözünü kesebileyim", color = MaterialTheme.colorScheme.onSurface)
+                    Text("Jarvis konuşurken uyandırma kelimesini söyleyin; susar ve sizi dinler.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(checked = bargeIn, onCheckedChange = { bargeIn = it; s.bargeIn = it })
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text("Bluetooth kulaklığın mikrofonunu kullan", color = MaterialTheme.colorScheme.onSurface)
+                    Text(
+                        "Kulaklıkla sizi duymuyorsa açın. Telefon cepteyken bile duyar ama kulaklık görüşme moduna geçer: müzik kalitesi düşer, pil biraz daha gider.",
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = headsetMic, onCheckedChange = {
+                    headsetMic = it
+                    s.headsetMic = it
+                    if (wakeRunning) scope.launch { WakeWordService.stop(context); kotlinx.coroutines.delay(700); WakeWordService.start(context) }
+                })
             }
 
             SectionTitle("Sesimi tanı")
