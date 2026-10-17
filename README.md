@@ -7,7 +7,7 @@ internette araştırma yapar ve telefonda komutlarını yerine getirir. Arka pla
 - Kotlin + Jetpack Compose, Material 3, koyu "Iron Man" teması
 - Yapay zeka: Gemini (varsayılan, `gemini-3.8-flash`) veya Claude (`claude-haiku-4-5`), tool calling ile
 - Ses tanıma: Android SpeechRecognizer (tr-TR)
-- Uyandırma: Picovoice Porcupine, hazır "jarvis" kelimesi
+- Uyandırma: ücretsiz ve çevrimdışı Vosk (anahtar gerekmez) ya da isteğe bağlı Picovoice Porcupine
 - Ses: telefondaki tüm TTS sesleri veya ElevenLabs
 - Hedef: Samsung S25+, One UI 8.5 / Android 16 (compileSdk/targetSdk 36), root gerekmez
 
@@ -18,7 +18,14 @@ internette araştırma yapar ve telefonda komutlarını yerine getirir. Arka pla
 1. Telefonda tarayıcıdan GitHub'a gir: `github.com/em11r06/jarvis` > **Releases** > **latest**.
 2. **Jarvis.apk** dosyasını indir ve aç.
 3. "Bilinmeyen uygulamalar" uyarısı çıkarsa: tarayıcıya (Chrome / Samsung Internet) **"Bu kaynaktan izin ver"** de.
-4. Kur ve Jarvis'i aç. Kurulum sihirbazı başlar; adımları sırayla takip et.
+4. **Play Protect "Uygulama, cihazınızı korumak için engellendi" derse:** Jarvis erişilebilirlik ve SMS
+   izni istediği için Google, Play Store dışından gelen bu tür uygulamaları otomatik engelliyor. Kurulum için geçici olarak kapat:
+   1. **Play Store** > sağ üstte profil resmi > **Play Protect** > sağ üstte **⚙ (ayarlar)**
+   2. **"Uygulamaları Play Protect ile tara"** seçeneğini kapat
+   3. APK'yı tekrar aç ve kur
+   4. İstersen sonra aynı yerden tekrar aç (Jarvis'i tekrar işaretleyebilir; "Yine de yükle/Tut" de)
+   5. Hâlâ engelleniyorsa Samsung'un **Otomatik Engelleyici**'sini kapat: Ayarlar > Güvenlik ve gizlilik > Otomatik Engelleyici
+5. Kur ve Jarvis'i aç. Kurulum sihirbazı başlar; adımları sırayla takip et.
 
 Her push'ta yeni APK otomatik derlenir ve aynı "latest" sayfasına konur. Güncellemek için
 aynı yerden yeni APK'yı indirip üzerine kurman yeterli.
@@ -31,7 +38,7 @@ sadece telefonda saklanır.
 | Anahtar | Nereden | Ücret | Zorunlu mu |
 |---|---|---|---|
 | **Gemini** | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) > Google hesabınla gir > **Create API key** > kopyala | Ücretsiz katman var | Evet (ya da Claude) |
-| **Picovoice AccessKey** | [console.picovoice.ai](https://console.picovoice.ai) > ücretsiz hesap aç > ana sayfadaki **AccessKey**'i kopyala | Kişisel kullanım ücretsiz | "Jarvis" diye uyandırma için |
+| **Picovoice AccessKey** | [console.picovoice.ai](https://console.picovoice.ai) (şirket e-postası istiyor) | Ücretsiz | Hayır. Anahtar yoksa ücretsiz Vosk motoru kullanılır |
 | **ElevenLabs** | [elevenlabs.io](https://elevenlabs.io) > giriş yap > sol altta profil > **API Keys** > Create | Ücretsiz deneme kotası var | Hayır (isteğe bağlı ses) |
 | **Claude** | [console.anthropic.com](https://console.anthropic.com) > **API Keys** | Ücretli | Hayır |
 
@@ -56,7 +63,7 @@ Sihirbaz bunları sırayla ister. Atladıysan Ayarlar > **Kurulum sihirbazı** i
    - Ayarlar > Uygulamalar > Varsayılan uygulamaları seç > **Dijital asistan uygulaması** > Jarvis
    - Ayarlar > Gelişmiş özellikler > **Yan tuş** > Basılı tut > **Dijital asistan**
    - Artık yan tuşa uzun basınca Jarvis açılır ve hemen dinlemeye başlar.
-8. **Uyandırma**: Jarvis Ayarlar > Picovoice anahtarını gir > **Arka planda dinle**'yi aç.
+8. **Uyandırma**: Jarvis Ayarlar > **Arka planda dinle**'yi aç (anahtar gerekmez). İlk açılışta ses modeli telefona kopyalanır, birkaç saniye sürer.
    Bildirimde "Jarvis dinliyor" görünür; bildirimdeki **Kapat** ile durdurabilirsin.
 
 ### Telefon yeniden başlayınca
@@ -152,7 +159,9 @@ Kararsız kaldığım yerlerde şunları seçtim:
 - **Anahtarların saklanması:** Uygulamaya özel SharedPreferences (başka uygulamalar okuyamaz). EncryptedSharedPreferences kütüphanesi
   Google tarafından kullanımdan kaldırıldığı için kullanılmadı. `allowBackup=false` ile yedeklere de girmez.
 - **ElevenLabs modeli:** `eleven_multilingual_v2` (Türkçe destekli çok dilli model). Hata/internet yoksa seçili Android sesine döner.
-- **Porcupine hassasiyeti:** 0.65 (kaçırma ve yanlış alarm arasında denge).
+- **Uyandırma motoru:** Picovoice şirket e-postası istediği için varsayılan motor **Vosk** (ücretsiz, çevrimdışı, Apache lisansı).
+  Küçük İngilizce model (~40 MB) derleme sırasında indirilip APK'ya konur; tanıyıcı sadece "jarvis" kelimesini arayacak şekilde kısıtlanır.
+  Porcupine'den biraz daha fazla pil harcar. Picovoice anahtarı girilirse otomatik olarak Porcupine (hassasiyet 0.65) kullanılır.
 - **Spotify:** `MEDIA_PLAY_FROM_SEARCH` intent'i. Spotify bazen sadece aramayı açıp çalmıyor; 3,5 sn sonra müzik çalmıyorsa "oynat" tuşu gönderiliyor.
 - **Ekran görüntüsü:** Erişilebilirlik servisinin `GLOBAL_ACTION_TAKE_SCREENSHOT` işlemi (sistem gibi galeriye kaydeder).
 - **Dokun/yaz/kaydır sonrası:** Araç, işlemden sonra ekranın yeni hâlini otomatik döndürür; yapay zeka bir sonraki adımı daha az turda seçer.

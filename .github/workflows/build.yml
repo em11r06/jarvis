@@ -26,6 +26,28 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # Ücretsiz uyandırma motoru Vosk için küçük İngilizce model (içinde "jarvis" kelimesi var).
+      - name: Vosk modelini önbellekten al
+        uses: actions/cache@v4
+        with:
+          path: vosk-model
+          key: vosk-model-small-en-us-0.15
+
+      - name: Vosk modelini APK'ya ekle
+        run: |
+          if [ ! -d vosk-model/vosk-model-small-en-us-0.15 ]; then
+            mkdir -p vosk-model
+            curl -fsSL -o vosk-model/m.zip https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
+            unzip -q vosk-model/m.zip -d vosk-model
+            rm vosk-model/m.zip
+          fi
+          mkdir -p app/src/main/assets
+          rm -rf app/src/main/assets/model-en-us
+          cp -r vosk-model/vosk-model-small-en-us-0.15 app/src/main/assets/model-en-us
+          echo "vosk-small-en-us-0.15" > app/src/main/assets/model-en-us/uuid
+          echo "jarvis sözlükte geçiyor mu:"; grep -rac "jarvis" app/src/main/assets/model-en-us || true
+          du -sh app/src/main/assets/model-en-us
+
       # Secret yoksa geçici çözüm: debug anahtarını önbellekte tut ki imza her derlemede aynı kalsın.
       - name: Debug anahtarını önbellekten al
         uses: actions/cache@v4

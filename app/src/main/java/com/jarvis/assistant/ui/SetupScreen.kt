@@ -141,7 +141,7 @@ fun SetupScreen(onFinish: () -> Unit) {
                 "API anahtarları",
                 "Konuşabilmem için bir yapay zeka anahtarı gerekli. Gemini ücretsiz.\n\n" +
                     "Gemini: aistudio.google.com > Get API key\n" +
-                    "Picovoice (\"Jarvis\" diye uyandırma için): console.picovoice.ai > AccessKey\n\n" +
+                    "\"Jarvis\" diye uyandırma anahtarsız çalışır; Ayarlar'dan \"Arka planda dinle\"yi açmanız yeterli.\n\n" +
                     "Anahtarları sonraki ekranda, Ayarlar'a yapıştıracaksınız.",
                 { settings.geminiKey.isNotBlank() || settings.claudeKey.isNotBlank() }, "Gemini anahtarı al",
                 action = { Permissions.open(it, Intent(Intent.ACTION_VIEW, Uri.parse("https://aistudio.google.com/apikey"))) },

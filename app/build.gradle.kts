@@ -76,4 +76,7 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jsoup:jsoup:1.21.1")
     implementation("ai.picovoice:porcupine-android:4.0.2")
+    // Ücretsiz, çevrimdışı uyandırma kelimesi (Picovoice anahtarı yoksa)
+    implementation("com.alphacephei:vosk-android:0.3.75")
+    implementation("net.java.dev.jna:jna:5.18.1@aar")
 }

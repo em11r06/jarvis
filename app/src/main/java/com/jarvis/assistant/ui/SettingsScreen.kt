@@ -97,7 +97,11 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
             SecretField("ElevenLabs API anahtarı (isteğe bağlı)", elevenKey, { elevenKey = it; s.elevenKey = it })
 
             SectionTitle("Uyandırma kelimesi (\"Jarvis\")")
-            SecretField("Picovoice AccessKey", picoKey, { picoKey = it; s.picovoiceKey = it })
+            Text(
+                "Anahtar gerekmez: Jarvis ücretsiz ve çevrimdışı Vosk motoruyla dinler. Picovoice anahtarınız varsa girin; daha az pil harcar.",
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            SecretField("Picovoice AccessKey (isteğe bağlı)", picoKey, { picoKey = it; s.picovoiceKey = it })
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
                 Column(Modifier.weight(1f)) {
                     Text("Arka planda dinle", color = MaterialTheme.colorScheme.onSurface)
@@ -110,7 +114,6 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
                     message = ""
                     if (on) {
                         when {
-                            picoKey.isBlank() -> message = "Önce Picovoice anahtarını girin."
                             !Permissions.has(context, Manifest.permission.RECORD_AUDIO) -> message = "Önce mikrofon izni verin (Kurulum sihirbazı)."
                             else -> {
                                 wake = true

@@ -1,8 +1,5 @@
 package com.jarvis.assistant.wake
 
-import ai.picovoice.porcupine.Porcupine
-import ai.picovoice.porcupine.PorcupineException
-import ai.picovoice.porcupine.PorcupineManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -27,14 +24,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Arka planda "Jarvis" kelimesini dinleyen servis (Picovoice Porcupine).
+ * Arka planda "Jarvis" kelimesini dinleyen servis (Vosk veya Picovoice Porcupine).
  * Mikrofon tipinde ön plan servisi olarak çalışır; bildirimde "Jarvis dinliyor" yazar.
- * Kelime duyulunca Porcupine mikrofonu bırakır, sesli oturum başlar, bitince tekrar dinler.
+ * Kelime duyulunca motor mikrofonu bırakır, sesli oturum başlar, bitince tekrar dinler.
  */
 class WakeWordService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    private var porcupine: PorcupineManager? = null
+    private var engine: WakeEngine? = null
+    private var ready = false
     private var listening = false
     private var inSession = false
 
@@ -64,48 +62,47 @@ class WakeWordService : Service() {
         running.value = true
 
         val assistant = JarvisApp.instance.assistant
-        // Uygulama içinden mikrofona basılırsa Porcupine mikrofonu bıraksın.
+        // Uygulama içinden mikrofona basılırsa uyandırma motoru mikrofonu bıraksın.
         assistant.beforeListen = { pauseDetection() }
         assistant.afterSession = { if (!inSession) resumeDetection() }
 
-        if (porcupine == null) initPorcupine()
-        resumeDetection()
+        if (engine == null) initEngine() else resumeDetection()
         return START_STICKY
     }
 
-    private fun initPorcupine() {
+    /** Picovoice anahtarı varsa Porcupine, yoksa ücretsiz Vosk motoru kullanılır. */
+    private fun initEngine() {
         val key = JarvisApp.instance.settings.picovoiceKey
-        if (key.isBlank()) {
-            updateNotification("Picovoice anahtarı yok. Ayarlardan girin.")
-            return
+        val onWake: () -> Unit = { scope.launch { onWakeWord() } }
+        val onFail: (String) -> Unit = { msg -> scope.launch { updateNotification(msg) } }
+        val e = if (key.isNotBlank()) {
+            PorcupineEngine(applicationContext, key, onWake, onFail)
+        } else {
+            VoskEngine(applicationContext, onWake, onFail)
         }
-        try {
-            porcupine = PorcupineManager.Builder()
-                .setAccessKey(key)
-                .setKeyword(Porcupine.BuiltInKeyword.JARVIS)
-                .setSensitivity(0.65f)
-                .setErrorCallback { e ->
-                    Log.w(TAG, "Porcupine hatası", e)
-                    scope.launch { updateNotification("Uyandırma hatası: ${e.message}") }
+        engine = e
+        updateNotification("Jarvis hazırlanıyor...")
+        e.init(
+            onReady = { scope.launch { ready = true; resumeDetection() } },
+            onError = { msg ->
+                scope.launch {
+                    Log.w(TAG, msg)
+                    updateNotification(msg)
                 }
-                .build(applicationContext) { scope.launch { onWakeWord() } }
-        } catch (e: PorcupineException) {
-            Log.w(TAG, "Porcupine kurulamadı", e)
-            updateNotification("Uyandırma başlatılamadı: ${e.message}")
-            porcupine = null
-        }
+            },
+        )
     }
 
     private fun pauseDetection() {
         if (!listening) return
-        runCatching { porcupine?.stop() }
+        engine?.stop()
         listening = false
     }
 
     private fun resumeDetection() {
-        if (listening || porcupine == null) return
+        if (listening || !ready || inSession) return
         try {
-            porcupine?.start()
+            engine?.start()
             listening = true
             updateNotification("Jarvis dinliyor")
         } catch (e: Exception) {
@@ -138,9 +135,8 @@ class WakeWordService : Service() {
         val assistant = JarvisApp.instance.assistant
         assistant.beforeListen = null
         assistant.afterSession = null
-        runCatching { porcupine?.stop() }
-        runCatching { porcupine?.delete() }
-        porcupine = null
+        engine?.release()
+        engine = null
         scope.cancel()
         super.onDestroy()
     }
