@@ -142,13 +142,13 @@ class WakeWordService : Service() {
 
     private var updateJob: kotlinx.coroutines.Job? = null
 
-    /** Servis çalıştığı sürece 30 dakikada bir yeni sürüm kontrolü (bildirimle haber verir). */
+    /** Servis çalıştığı sürece yeni sürüm kontrolü (6 saatte bir; bildirimle haber verir). */
     private fun startUpdateChecks() {
         if (updateJob?.isActive == true) return
         updateJob = scope.launch {
             while (true) {
                 com.jarvis.assistant.update.Updater.checkInBackground(applicationContext)
-                kotlinx.coroutines.delay(30 * 60 * 1000L)
+                kotlinx.coroutines.delay(60 * 60 * 1000L)
             }
         }
     }

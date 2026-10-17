@@ -38,7 +38,7 @@ object Updater {
     private const val REPO = "em11r06/jarvis"
     private const val CHANNEL = "jarvis_update"
     private const val NOTIF_ID = 77
-    private const val CHECK_INTERVAL_MS = 30 * 60 * 1000L // 30 dakika
+    private const val CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L // 6 saat
 
     sealed class State {
         data object Idle : State()
@@ -65,10 +65,6 @@ object Updater {
         prefs.edit().putLong("last_check", System.currentTimeMillis()).apply()
         scope.launch { checkAndDownload(context.applicationContext, background = !force) }
     }
-
-    /** Ölçülü bağlantıda (mobil veri) mıyız? Büyük indirmeyi sormadan yapmamak için. */
-    private fun isMetered(context: Context): Boolean =
-        context.getSystemService(android.net.ConnectivityManager::class.java).isActiveNetworkMetered
 
     /** Bildirime dokununca: indirilmediyse indir, sonra kurulum ekranını aç. */
     fun downloadAndInstall(context: Context) {
@@ -113,11 +109,11 @@ object Updater {
                 ?: return "Yeni sürümde APK yok.".also { _state.value = State.Error(it) }
             val notes = json.optString("body").lineSequence().firstOrNull { it.isNotBlank() }.orEmpty()
 
-            // Arka plan kontrolünde mobil verideyse indirmeden sadece haber ver.
-            if (background && isMetered(context)) {
+            // Arka plan kontrolünde indirmeden sadece bildirimle haber ver; dokununca indirilir.
+            if (background) {
                 _state.value = State.Idle
                 notifyAvailable(context, version, notes)
-                return "Sürüm $version var; mobil veride olduğunuz için indirmedim."
+                return "Sürüm $version var."
             }
             val file = download(context, url, version)
             _state.value = State.Ready(version, notes, file)
