@@ -183,10 +183,10 @@ class AssistantController(
             !com.jarvis.assistant.ai.GeminiQuota.billingBlocked()
         if (cloud) {
             cloudListener.hints = hints
-            cloudListener.context_ = history.turns.takeLast(4).mapNotNull {
+            cloudListener.context_ = history.turns.takeLast(8).mapNotNull {
                 when (it) {
-                    is Turn.User -> "Kullanıcı: ${it.text.take(150)}"
-                    is Turn.Assistant -> it.text.takeIf { t -> t.isNotBlank() }?.let { t -> "Jarvis: ${t.take(200)}" }
+                    is Turn.User -> "Kullanıcı: ${it.text.take(200)}"
+                    is Turn.Assistant -> it.text.takeIf { t -> t.isNotBlank() }?.let { t -> "Jarvis: ${t.take(250)}" }
                     else -> null
                 }
             }.joinToString(" / ")

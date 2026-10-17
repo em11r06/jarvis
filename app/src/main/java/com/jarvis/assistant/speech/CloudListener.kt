@@ -40,6 +40,9 @@ class CloudListener(private val context: Context, private val settings: Settings
     @Volatile
     var context_: String = ""
 
+    /** Kullanıcının konuşma tarzı rehberi: sık kullandığı argo/kelimeleri doğru yazması için. */
+    private val style get() = settings.styleGuide
+
     suspend fun listen(startTimeoutMs: Long, onPartial: (String) -> Unit): Result {
         val pcm = withContext(Dispatchers.IO) { record(startTimeoutMs, onPartial) } ?: return Result.NoSpeech
         onPartial("Anlıyorum…")
@@ -132,11 +135,15 @@ class CloudListener(private val context: Context, private val settings: Settings
         if (GeminiQuota.billingBlocked()) throw IllegalStateException("Gemini bakiyesi bitti")
         val wav = wav(pcm)
         val prompt = buildString {
-            append("Bu ses kaydında bir kişi telefonundaki Türkçe sesli asistana (adı Jarvis) bir şey söylüyor. ")
-            append("Söyleneni kelimesi kelimesine, doğru Türkçe yazımla yazıya dök. Sadece söylenen metni yaz; açıklama, tırnak, etiket ekleme. ")
-            append("Argo, kısaltma ve günlük konuşmayı olduğu gibi koru; düzeltme ya da cevap verme. ")
+            append("Bu ses kaydında bir kişi telefonundaki Türkçe sesli asistanla (adı Jarvis) konuşuyor. ")
+            append("Bu bir komut da olabilir, arkadaşıyla konuşur gibi uzun, rahat bir sohbet de: espri, argo, yarım cümle, ")
+            append("\"ya\", \"işte\", \"hani\" gibi dolgu sözleri, devrik cümleler, araya giren İngilizce kelimeler olabilir. ")
+            append("Söyleneni kelimesi kelimesine, doğru Türkçe yazımla yazıya dök; anlamı değiştirme, toparlama, kısaltma. ")
+            append("Sadece söylenen metni yaz; açıklama, tırnak, etiket ekleme, cevap verme. ")
+            append("Belirsiz bir kelime olursa konuşmanın bağlamına ve kişinin konuşma tarzına en uygun olanı seç. ")
             append("Kayıtta anlaşılır konuşma yoksa sadece - yaz.")
-            if (context_.isNotBlank()) append("\nKonuşmanın bağlamı (doğru anlamana yardımcı olsun): ").append(context_.take(400))
+            if (style.isNotBlank()) append("\nKişinin konuşma tarzı (sık kullandığı kelimeler ve hitaplar): ").append(style.take(1200))
+            if (context_.isNotBlank()) append("\nKonuşmanın son kısmı (doğru anlamana yardımcı olsun): ").append(context_.take(1200))
             if (hints.isNotEmpty()) {
                 append("\nKişinin rehberindeki isimler ve telefonundaki uygulamalar (bunlardan biri söylenmişse aynen bu yazımla yaz): ")
                 append(hints.take(250).joinToString(", "))
@@ -188,8 +195,9 @@ class CloudListener(private val context: Context, private val settings: Settings
     companion object {
         private const val TAG = "JarvisCloudStt"
         private const val SAMPLE_RATE = 16000
-        private const val END_SILENCE_MS = 1100
-        private const val MAX_SECONDS = 30
+        /** Sohbette düşünürken verilen kısa duraklamalarda kesmesin. */
+        private const val END_SILENCE_MS = 1600
+        private const val MAX_SECONDS = 60
         /** Hızlı ve ucuz modeller; ses anlama hepsinde var. */
         private val MODELS = listOf("gemini-flash-lite-latest", "gemini-2.5-flash-lite", "gemini-flash-latest", "gemini-2.5-flash")
     }
