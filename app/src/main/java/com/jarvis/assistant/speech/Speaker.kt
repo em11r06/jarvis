@@ -209,9 +209,17 @@ class Speaker(private val context: Context, private val settings: Settings) {
         }
     }
 
-    suspend fun previewEleven(text: String, voiceId: String): Boolean {
+    /** @return hata varsa kullanıcıya gösterilecek Türkçe açıklama, başarılıysa null */
+    suspend fun previewEleven(text: String, voiceId: String): String? {
         stop()
-        return runCatching { speakEleven(text, voiceId) }.getOrDefault(false)
+        return try {
+            speakEleven(text, voiceId)
+            null
+        } catch (e: ElevenException) {
+            e.message
+        } catch (e: Exception) {
+            "Bağlantı hatası: ${e.message}"
+        }
     }
 
     private suspend fun speakAndroid(text: String, voiceName: String, rate: Float, pitch: Float) {
@@ -276,7 +284,7 @@ class Speaker(private val context: Context, private val settings: Settings) {
             .post(body.toString().toRequestBody("application/json".toMediaType()))
             .build()
         Http.client.newCall(req).execute().use { res ->
-            if (!res.isSuccessful) throw IllegalStateException("ElevenLabs ${res.code}: ${res.body?.string()?.take(200)}")
+            if (!res.isSuccessful) throw ElevenException.from(res.code, res.body?.string().orEmpty())
             val f = File(context.cacheDir, "eleven_${System.nanoTime()}.mp3")
             f.outputStream().use { out -> res.body!!.byteStream().copyTo(out) }
             f
@@ -330,5 +338,31 @@ class Speaker(private val context: Context, private val settings: Settings) {
 
     private companion object {
         const val TAG = "JarvisSpeaker"
+    }
+}
+
+/** ElevenLabs hatası; mesajı kullanıcıya gösterilecek Türkçe açıklamadır. */
+class ElevenException(message: String) : Exception(message) {
+    companion object {
+        fun from(code: Int, body: String): ElevenException {
+            val detail = runCatching { JSONObject(body).optJSONObject("detail") }.getOrNull()
+            val status = detail?.optString("status").orEmpty()
+            val raw = detail?.optString("message")?.takeIf { it.isNotBlank() } ?: body.take(200)
+            val text = when {
+                status.contains("paid_plan") || status.contains("free_users") || code == 402 ->
+                    "Bu ses ücretsiz hesapta uygulamalardan kullanılamıyor (Voice Library sesi). " +
+                        "ElevenLabs'in hazır seslerinden birini seçin ya da ücretli plana geçin."
+                status.contains("quota") || status.contains("credits") ->
+                    "ElevenLabs aylık karakter kotanız dolmuş."
+                status.contains("voice_not_found") || code == 404 ->
+                    "Bu ses ID hesabınızda bulunamadı. Sesi önce ElevenLabs'te 'My Voices'a ekleyin."
+                status.contains("missing_permissions") ->
+                    "API anahtarında gerekli izin yok. Anahtarı 'Text to Speech' ve 'Voices: Read' izinleriyle yeniden oluşturun."
+                code == 401 -> "ElevenLabs anahtarı geçersiz."
+                code == 429 -> "ElevenLabs çok fazla istek dedi, biraz sonra deneyin."
+                else -> "ElevenLabs hatası ($code)"
+            }
+            return ElevenException("$text\n(Ayrıntı: $raw)")
+        }
     }
 }

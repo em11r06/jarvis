@@ -167,8 +167,7 @@ fun VoiceSettingsScreen(onBack: () -> Unit) {
                         }, enabled = elevenKey.isNotBlank()) { Text("Seslerimi getir") }
                         OutlinedButton(onClick = {
                             scope.launch {
-                                val ok = speaker.previewEleven(VoiceCatalog.SAMPLE, elevenId)
-                                if (!ok) elevenStatus = "Okunamadı. Anahtarı, ses ID'sini ve interneti kontrol edin."
+                                elevenStatus = speaker.previewEleven(VoiceCatalog.SAMPLE, elevenId) ?: ""
                             }
                         }, enabled = elevenKey.isNotBlank() && elevenId.isNotBlank()) { Text("Dinle") }
                     }
@@ -201,7 +200,7 @@ fun VoiceSettingsScreen(onBack: () -> Unit) {
                             settings.elevenVoiceId = v.id
                             settings.elevenVoiceName = v.name
                         },
-                        onListen = { scope.launch { speaker.previewEleven(VoiceCatalog.SAMPLE, v.id) } },
+                        onListen = { scope.launch { elevenStatus = speaker.previewEleven(VoiceCatalog.SAMPLE, v.id) ?: "" } },
                     )
                 }
             }
