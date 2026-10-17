@@ -289,7 +289,8 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
             Text(
                 "WhatsApp: sohbette ⋮ > Diğer > Sohbeti dışa aktar > Medya olmadan. Instagram: Hesap Merkezi > Bilgilerin ve izinlerin > " +
                     "Bilgilerini indir (Mesajlar, tercihen JSON) ile gelen ZIP. Dosyayı buraya yükleyin ya da paylaş menüsünden Jarvis'i seçin. " +
-                    "Jarvis sadece SİZİN mesajlarınızı analiz edip sizin gibi konuşur.",
+                    "Jarvis SİZİN mesajlarınızı analiz edip sizin gibi konuşur. Mizah tarzınız için ayrıca güldüğünüz espriler " +
+                    "(😂 tepkisi ya da 'hahaha' cevabı verdikleriniz, isimsiz) ve paylaştığınız reels açıklamaları kullanılır.",
                 fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {

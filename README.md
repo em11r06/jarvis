@@ -141,7 +141,10 @@ Nano küçük bir modeldir; cevapları daha basittir ve internette arama yapamaz
 WhatsApp'ta sohbet > ⋮ > Diğer > **Sohbeti dışa aktar** > **Medya olmadan** > paylaş menüsünden **Jarvis**
 (ya da Ayarlar > Konuşma tarzım > Sohbet yükle). Instagram için: Ayarlar > Hesap Merkezi > Bilgilerin ve izinlerin >
 **Bilgilerini indir** > Cihaza indir > sadece **Mesajlar**, biçim **JSON** (HTML de olur) > gelen ZIP'i Jarvis'e yükle. Birkaç sohbet yükle, "Hangisi sizsiniz?" altından kendi adını seç,
-**Tarzımı analiz et** de. Yapay zekaya **sadece senin mesajların** gönderilir; çıkan rehber Ayarlar'da düzenlenebilir
+**Tarzımı analiz et** de. Mizah tarzı için ayrıca **güldüğün espriler** (Instagram'da 😂/🤣/💀 tepkisi bıraktıkların ya da
+hemen ardından "hahaha", "jsjs", "koptum" gibi cevap verdiklerin; isimsiz, en fazla ~3500 karakter) ve arkadaşlarına
+paylaştığın reels açıklamaları kullanılır (Instagram beğenileri dosyasında içerik olmadığı için kullanılmaz).
+Bunların dışında yapay zekaya **sadece senin mesajların** gönderilir; çıkan rehber Ayarlar'da düzenlenebilir
 ve Jarvis seninle o tarzda konuşur. Yüklenen sohbetler sadece telefonda saklanır, istendiğinde silinir.
 
 ## 5. Kullanım örnekleri

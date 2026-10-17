@@ -12,11 +12,19 @@ import java.io.File
 import java.util.zip.ZipInputStream
 
 /** Dışa aktarılmış sohbetteki tek mesaj. */
-data class ChatLine(val sender: String, val text: String)
+data class ChatLine(
+    val sender: String,
+    val text: String,
+    /** Bu mesaja gülme tepkisi (😂 vb.) bırakanlar, virgülle ayrılmış (Instagram). */
+    val laughBy: String = "",
+    /** Gönderenin paylaştığı bir gönderi/reels açıklaması mı? */
+    val shared: Boolean = false,
+)
 
 /**
  * WhatsApp ve Instagram sohbet dökümlerinden kullanıcının kendi mesajlarını ayıklar ve
- * yapay zekaya konuşma tarzını analiz ettirir. Karşı tarafın mesajları yapay zekaya gönderilmez.
+ * yapay zekaya konuşma tarzını analiz ettirir. Karşı tarafın mesajlarından sadece kullanıcının GÜLDÜĞÜ
+ * kısa espriler (isimsiz) mizah analizi için gönderilir; diğerleri telefonda kalır.
  */
 object StyleLearner {
 
@@ -101,10 +109,26 @@ object StyleLearner {
     /** Instagram JSON: {"messages":[{"sender_name":..,"content":..}]} */
     fun parseInstagramJson(text: String): List<ChatLine> {
         val arr = runCatching { JSONObject(text).optJSONArray("messages") }.getOrNull() ?: return emptyList()
-        return (0 until arr.length()).mapNotNull { i ->
+        return (0 until arr.length()).flatMap { i ->
             val o = arr.getJSONObject(i)
-            val content = o.optString("content").takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            ChatLine(fixMojibake(o.optString("sender_name")), fixMojibake(content))
+            val sender = fixMojibake(o.optString("sender_name"))
+            val out = mutableListOf<ChatLine>()
+            // Paylaşılan reels/gönderi açıklaması: kişinin hoşuna giden içerik türü.
+            o.optJSONObject("share")?.optString("share_text")?.takeIf { it.isNotBlank() }?.let {
+                out += ChatLine(sender, fixMojibake(it).take(500), shared = true)
+            }
+            val content = o.optString("content").takeIf { it.isNotBlank() }
+            if (content != null) {
+                // Bu mesaja gülme tepkisi bırakanlar.
+                val reactions = o.optJSONArray("reactions")
+                val laughers = (0 until (reactions?.length() ?: 0)).mapNotNull { r ->
+                    val re = reactions!!.getJSONObject(r)
+                    val emoji = fixMojibake(re.optString("reaction"))
+                    if (LAUGH_EMOJI.any { emoji.contains(it) }) fixMojibake(re.optString("actor")) else null
+                }
+                out += ChatLine(sender, fixMojibake(content), laughBy = laughers.joinToString(","))
+            }
+            out.reversed()
         }.reversed() // Instagram yeniden eskiye verir
             .filter { l -> IG_SKIP.none { l.text.contains(it, ignoreCase = true) } }
     }
@@ -160,13 +184,45 @@ object StyleLearner {
 
     fun load(ctx: Context): List<ChatLine> = runCatching {
         val arr = JSONArray(file(ctx).readText())
-        (0 until arr.length()).map { arr.getJSONObject(it).let { o -> ChatLine(o.getString("s"), o.getString("t")) } }
+        (0 until arr.length()).map {
+            arr.getJSONObject(it).let { o ->
+                ChatLine(o.getString("s"), o.getString("t"), o.optString("l"), o.optBoolean("h", false))
+            }
+        }
     }.getOrDefault(emptyList())
 
     private fun save(ctx: Context, lines: List<ChatLine>) {
         val arr = JSONArray()
-        lines.forEach { arr.put(JSONObject().put("s", it.sender).put("t", it.text)) }
+        lines.forEach {
+            val o = JSONObject().put("s", it.sender).put("t", it.text)
+            if (it.laughBy.isNotBlank()) o.put("l", it.laughBy)
+            if (it.shared) o.put("h", true)
+            arr.put(o)
+        }
         file(ctx).writeText(arr.toString())
+    }
+
+    private val LAUGH_EMOJI = listOf("😂", "🤣", "💀", "😹", "😆", "😅")
+
+    /** Kısa bir "gülme" cevabı mı? (hahaha, jsjs, koptum, 😂 ...) */
+    private val LAUGH_REPLY = Regex(
+        "(?i)(\\b(a?h[ae]){2,}|hah|hehe|jsjs|sksk|asdf|kopt|öldüm|gülmekten|gulmekten|😂|🤣|💀|😹|😆)",
+    )
+
+    /**
+     * Kullanıcının güldüğü başkalarına ait mesajlar: ya gülme tepkisi bırakmış (Instagram)
+     * ya da hemen ardından kısa bir gülme cevabı yazmış.
+     */
+    private fun funnyForMe(all: List<ChatLine>, names: Set<String>): List<String> {
+        val out = LinkedHashSet<String>()
+        all.forEachIndexed { i, l ->
+            if (l.sender in names || l.shared) return@forEachIndexed
+            val reacted = l.laughBy.split(',').any { it.trim() in names }
+            val next = all.getOrNull(i + 1)
+            val laughedAfter = next != null && next.sender in names && next.text.length <= 40 && LAUGH_REPLY.containsMatchIn(next.text)
+            if ((reacted || laughedAfter) && l.text.length in 8..400) out += l.text.replace("\n", " ")
+        }
+        return out.toList()
     }
 
     fun clear(ctx: Context) {
@@ -186,7 +242,7 @@ object StyleLearner {
      */
     suspend fun analyze(ctx: Context, me: String): String {
         val names = me.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
-        val mine = load(ctx).filter { it.sender in names }.map { it.text.replace("\n", " ") }
+        val mine = load(ctx).filter { it.sender in names && !it.shared }.map { it.text.replace("\n", " ") }
         if (mine.size < 20) return "Analiz için en az 20 mesajınız olmalı (şu an ${mine.size})."
         // Farklı sohbetlerden çeşitli örnekler: en fazla ~12 bin karakter.
         val sample = StringBuilder()
@@ -196,9 +252,24 @@ object StyleLearner {
             if (sample.length + m.length > 12000) break
             sample.append("- ").append(m).append('\n')
         }
+        // Güldüğü espriler ve paylaştığı içerikler (mizah tarzı için).
+        val all = load(ctx)
+        val funny = funnyForMe(all, names).shuffled().fold(StringBuilder()) { b, t ->
+            if (b.length + t.length < 3500) b.append("- ").append(t.take(300)).append('\n')
+            b
+        }
+        val shares = all.filter { it.shared && it.sender in names }.map { it.text.replace("\n", " ") }.distinct()
+            .shuffled().fold(StringBuilder()) { b, t ->
+                if (b.length + t.length < 2500) b.append("- ").append(t.take(250)).append('\n')
+                b
+            }
+        val humor = buildString {
+            if (funny.isNotEmpty()) append("\n\nKişinin GÜLDÜĞÜ mesajlar (başkalarının yazdığı espriler):\n").append(funny)
+            if (shares.isNotEmpty()) append("\n\nKişinin arkadaşlarına PAYLAŞTIĞI içeriklerin açıklamaları:\n").append(shares)
+        }
         val system = "Sen bir dil ve üslup analistisin. Türkçe yaz."
         val prompt = """
-Aşağıda bir kişinin WhatsApp'ta yazdığı mesajlardan örnekler var. Bu kişinin konuşma tarzını analiz et ve
+Aşağıda bir kişinin WhatsApp/Instagram'da yazdığı mesajlardan örnekler var. Bu kişinin konuşma tarzını analiz et ve
 bir sesli asistanın onunla AYNI TARZDA konuşabilmesi için kısa bir "konuşma tarzı rehberi" yaz.
 
 Şunlara bak: hitap şekilleri, sık kullandığı kelime ve kalıplar, argo/kısaltmalar, cümle uzunluğu, resmiyet düzeyi,
@@ -212,6 +283,11 @@ Kurallar:
 
 Mesajlar:
 $sample
+$humor
+
+Güldüğü mesajlar ya da paylaştığı içerikler verildiyse, sonuna "Mizah tarzı:" başlıklı 4-6 madde daha ekle:
+ne tür esprilere güldüğünü (absürt, kara mizah, laf sokma, futbol, kelime oyunu vb.), sevdiği konuları ve asistanın
+ona nasıl espri yapması gerektiğini yaz. Espriyi aynen kopyalama, türünü anlat.
 """.trim()
         val guide = JarvisApp.instance.assistant.agent.oneShot(system, prompt).trim()
         if (guide.isBlank()) return "Analiz yapılamadı, tekrar deneyin."
