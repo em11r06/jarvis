@@ -374,9 +374,11 @@ class MicLoop(
             rate, android.media.AudioFormat.CHANNEL_IN_MONO, android.media.AudioFormat.ENCODING_PCM_16BIT,
         )
         val chunk = rate / 5 // 0,2 saniyelik parçalar
-        if (btMic != null && context != null) {
+        val ctx = context
+        val dev = btMic
+        if (dev != null && ctx != null) {
             // Bluetooth kulaklığın mikrofonunu aç (kulaklık "görüşme" moduna geçer).
-            routedBt = runCatching { context.getSystemService(AudioManager::class.java).setCommunicationDevice(btMic) }.getOrDefault(false)
+            routedBt = runCatching { ctx.getSystemService(AudioManager::class.java).setCommunicationDevice(dev) }.getOrDefault(false)
         }
         val r = android.media.AudioRecord(
             // VOICE_COMMUNICATION: telefonun yankı engelleme ve gürültü azaltma işlemini açar.
@@ -428,8 +430,9 @@ class MicLoop(
         runCatching { ns?.release() }
         aec = null
         ns = null
-        if (routedBt && context != null) {
-            runCatching { context.getSystemService(AudioManager::class.java).clearCommunicationDevice() }
+        val ctx = context
+        if (routedBt && ctx != null) {
+            runCatching { ctx.getSystemService(AudioManager::class.java).clearCommunicationDevice() }
             routedBt = false
         }
     }
