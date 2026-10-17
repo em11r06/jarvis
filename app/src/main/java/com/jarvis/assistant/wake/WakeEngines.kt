@@ -3,13 +3,17 @@ package com.jarvis.assistant.wake
 import ai.picovoice.porcupine.Porcupine
 import ai.picovoice.porcupine.PorcupineManager
 import android.content.Context
-import android.util.Log
-import org.json.JSONObject
+import com.jarvis.assistant.data.Settings
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import org.vosk.Model
 import org.vosk.Recognizer
+import org.vosk.SpeakerModel
 import org.vosk.android.RecognitionListener
 import org.vosk.android.SpeechService
-import org.vosk.android.StorageService
 
 /**
  * "Jarvis" kelimesini dinleyen motor. İki seçenek var:
@@ -56,36 +60,44 @@ class PorcupineEngine(
 }
 
 /**
- * Vosk ile anahtar kelime yakalama. Model APK'nın içinde (assets/model-en-us) gelir;
- * ilk açılışta telefona bir kez kopyalanır. Tanıyıcı sadece "jarvis" kelimesini
- * arayacak şekilde kısıtlanır ([unk] = başka her şey), bu yüzden hafif çalışır.
+ * Vosk ile anahtar kelime yakalama. Model APK'nın içinde gelir; ilk açılışta telefona
+ * bir kez kopyalanır. Tanıyıcı sadece "jarvis" kelimesini arar ([unk] = başka her şey).
+ * Kelime duyulunca güven puanına ve (kayıtlıysa) kullanıcının ses izine bakılır;
+ * böylece şarkılardaki benzer sesler Jarvis'i uyandırmaz.
  */
 class VoskEngine(
     private val context: Context,
+    private val settings: Settings,
     private val onWake: () -> Unit,
     private val onFail: (String) -> Unit,
 ) : WakeEngine {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var model: Model? = null
+    private var speaker: SpeakerModel? = null
+    private var recognizer: Recognizer? = null
     private var service: SpeechService? = null
     private var lastWake = 0L
 
     override fun init(onReady: () -> Unit, onError: (String) -> Unit) {
-        StorageService.unpack(
-            context.applicationContext, MODEL_ASSET, "vosk",
-            { m ->
+        scope.launch {
+            try {
+                val (m, s) = VoskModels.load(context.applicationContext)
                 model = m
+                speaker = s
                 onReady()
-            },
-            { e -> onError("Ses modeli açılamadı: ${e.message}") },
-        )
+            } catch (e: Exception) {
+                onError("Ses modeli açılamadı: ${e.message}")
+            }
+        }
     }
 
     override fun start() {
         val m = model ?: return
         if (service != null) return
         try {
-            val rec = Recognizer(m, SAMPLE_RATE, GRAMMAR)
-            service = SpeechService(rec, SAMPLE_RATE).also { it.startListening(listener) }
+            val rec = VoskModels.recognizer(m, speaker)
+            recognizer = rec
+            service = SpeechService(rec, VoskModels.SAMPLE_RATE).also { it.startListening(listener) }
         } catch (e: Exception) {
             onFail("Mikrofon açılamadı: ${e.message}")
         }
@@ -96,36 +108,27 @@ class VoskEngine(
         runCatching { service?.cancel() }
         runCatching { service?.shutdown() }
         service = null
+        runCatching { recognizer?.close() }
+        recognizer = null
     }
 
     override fun release() {
         stop()
-        runCatching { model?.close() }
-        model = null
+        scope.cancel()
     }
 
     private val listener = object : RecognitionListener {
-        override fun onPartialResult(hypothesis: String?) = check(hypothesis, "partial")
-        override fun onResult(hypothesis: String?) = check(hypothesis, "text")
+        override fun onPartialResult(hypothesis: String?) {}
+        override fun onResult(hypothesis: String?) {
+            val hit = VoiceId.parse(hypothesis) ?: return
+            if (!VoiceId.accept(context, settings, hit)) return
+            val now = System.currentTimeMillis()
+            if (now - lastWake < 1500) return
+            lastWake = now
+            onWake()
+        }
         override fun onFinalResult(hypothesis: String?) {}
         override fun onError(exception: Exception?) { onFail("Uyandırma hatası: ${exception?.message}") }
         override fun onTimeout() {}
-    }
-
-    private fun check(json: String?, field: String) {
-        val text = runCatching { JSONObject(json ?: "{}").optString(field) }.getOrDefault("")
-        if (!text.contains(KEYWORD)) return
-        val now = System.currentTimeMillis()
-        if (now - lastWake < 1500) return
-        lastWake = now
-        Log.d("JarvisWake", "Vosk duydu: $text")
-        onWake()
-    }
-
-    companion object {
-        const val MODEL_ASSET = "model-en-us"
-        private const val SAMPLE_RATE = 16000f
-        private const val KEYWORD = "jarvis"
-        private const val GRAMMAR = "[\"jarvis\", \"[unk]\"]"
     }
 }

@@ -78,7 +78,7 @@ class WakeWordService : Service() {
         val e = if (key.isNotBlank()) {
             PorcupineEngine(applicationContext, key, onWake, onFail)
         } else {
-            VoskEngine(applicationContext, onWake, onFail)
+            VoskEngine(applicationContext, JarvisApp.instance.settings, onWake, onFail)
         }
         engine = e
         updateNotification("Jarvis hazırlanıyor...")

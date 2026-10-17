@@ -37,6 +37,10 @@ class Settings(context: Context) {
     var followUpSeconds by int("follow_up_seconds", 6)
     /** Uyanınca bip yerine "Buyrun efendim" gibi sesli cevap ver. */
     var wakeGreeting by bool("wake_greeting", true)
+    /** Kullanıcının ses izi (virgülle ayrılmış sayılar); boşsa herkese tepki verir. */
+    var voicePrint by str("voice_print", "")
+    /** Ses izi benzerlik eşiği; büyüdükçe daha seçici. */
+    var voiceThreshold by float("voice_threshold", 0.5f)
 
     var setupDone by bool("setup_done", false)
 

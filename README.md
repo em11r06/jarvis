@@ -68,7 +68,9 @@ Sihirbaz bunları sırayla ister. Atladıysan Ayarlar > **Kurulum sihirbazı** i
    - Ayarlar > Uygulamalar > Varsayılan uygulamaları seç > **Dijital asistan uygulaması** > Jarvis
    - Ayarlar > Gelişmiş özellikler > **Yan tuş** > Basılı tut > **Dijital asistan**
    - Artık yan tuşa uzun basınca Jarvis açılır ve hemen dinlemeye başlar.
-8. **Uyandırma**: Jarvis Ayarlar > **Arka planda dinle**'yi aç (anahtar gerekmez). İlk açılışta ses modeli telefona kopyalanır, birkaç saniye sürer.
+8. **Sesimi tanıt** (önerilir): Jarvis Ayarlar > **Sesimi tanı** > 5 kez "Jarvis" de. Bundan sonra Jarvis sadece
+   senin sesine uyanır; şarkılardaki benzer seslere ve başkalarına tepki vermez. Seni tanımazsa "Seçicilik"i düşür.
+9. **Uyandırma**: Jarvis Ayarlar > **Arka planda dinle**'yi aç (anahtar gerekmez). İlk açılışta ses modeli telefona kopyalanır, birkaç saniye sürer.
    Bildirimde "Jarvis dinliyor" görünür; bildirimdeki **Kapat** ile durdurabilirsin.
 
 ### Telefon yeniden başlayınca
@@ -168,7 +170,9 @@ Kararsız kaldığım yerlerde şunları seçtim:
 - **Doğal ses:** ElevenLabs'e stability 0.4, style 0.2 ve önceki/sonraki cümle bilgisi gönderilir (akıcı tonlama).
 - **Uyandırma motoru:** Picovoice şirket e-postası istediği için varsayılan motor **Vosk** (ücretsiz, çevrimdışı, Apache lisansı).
   Küçük İngilizce model (~40 MB) derleme sırasında indirilip APK'ya konur; tanıyıcı sadece "jarvis" kelimesini arayacak şekilde kısıtlanır.
-  Porcupine'den biraz daha fazla pil harcar. Picovoice anahtarı girilirse otomatik olarak Porcupine (hassasiyet 0.65) kullanılır.
+  Porcupine'den biraz daha fazla pil harcar. Yanlış uyanmayı azaltmak için kelime güven puanı kontrol edilir (müzik çalarken daha sıkı)
+  ve kullanıcı sesini tanıttıysa Vosk ses izi modeliyle (vosk-model-spk-0.4) konuşanın o olup olmadığına bakılır.
+  Eşik, kayıt sırasındaki örneklerin birbirine benzerliğinden kişiye göre hesaplanır. Picovoice anahtarı girilirse otomatik olarak Porcupine (hassasiyet 0.65) kullanılır.
 - **Spotify:** `MEDIA_PLAY_FROM_SEARCH` intent'i. Spotify bazen sadece aramayı açıp çalmıyor; 3,5 sn sonra müzik çalmıyorsa "oynat" tuşu gönderiliyor.
 - **Ekran görüntüsü:** Erişilebilirlik servisinin `GLOBAL_ACTION_TAKE_SCREENSHOT` işlemi (sistem gibi galeriye kaydeder).
 - **Dokun/yaz/kaydır sonrası:** Araç, işlemden sonra ekranın yeni hâlini otomatik döndürür; yapay zeka bir sonraki adımı daha az turda seçer.

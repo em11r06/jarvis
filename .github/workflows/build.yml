@@ -31,7 +31,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: vosk-model
-          key: vosk-model-small-en-us-0.15
+          key: vosk-models-en-us-0.15-spk-0.4
 
       - name: Vosk modelini APK'ya ekle
         run: |
@@ -41,7 +41,18 @@ jobs:
             unzip -q vosk-model/m.zip -d vosk-model
             rm vosk-model/m.zip
           fi
+          # Ses izi modeli: "Sesimi tanıt" özelliği konuşanın kullanıcı olup olmadığını buna bakarak anlar.
+          if [ ! -d vosk-model/vosk-model-spk-0.4 ]; then
+            mkdir -p vosk-model
+            curl -fsSL -o vosk-model/spk.zip https://alphacephei.com/vosk/models/vosk-model-spk-0.4.zip
+            unzip -q vosk-model/spk.zip -d vosk-model
+            rm vosk-model/spk.zip
+          fi
+          ls vosk-model
           mkdir -p app/src/main/assets
+          rm -rf app/src/main/assets/model-spk
+          cp -r vosk-model/vosk-model-spk-0.4 app/src/main/assets/model-spk
+          echo "vosk-spk-0.4" > app/src/main/assets/model-spk/uuid
           rm -rf app/src/main/assets/model-en-us
           cp -r vosk-model/vosk-model-small-en-us-0.15 app/src/main/assets/model-en-us
           echo "vosk-small-en-us-0.15" > app/src/main/assets/model-en-us/uuid

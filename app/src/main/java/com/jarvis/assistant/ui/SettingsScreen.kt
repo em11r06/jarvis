@@ -59,6 +59,9 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
     var elevenKey by remember { mutableStateOf(s.elevenKey) }
     var wake by remember { mutableStateOf(s.wakeEnabled) }
     var greeting by remember { mutableStateOf(s.wakeGreeting) }
+    var hasPrint by remember { mutableStateOf(s.voicePrint.isNotBlank()) }
+    var threshold by remember { mutableFloatStateOf(s.voiceThreshold) }
+    var enrolling by remember { mutableStateOf(false) }
     var follow by remember { mutableFloatStateOf(s.followUpSeconds.toFloat()) }
     var confirmClear by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
@@ -143,6 +146,27 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
                 Switch(checked = greeting, onCheckedChange = { greeting = it; s.wakeGreeting = it })
             }
 
+            SectionTitle("Sesimi tanı")
+            Text(
+                if (hasPrint) "Sesiniz kayıtlı: Jarvis sadece size tepki verir (eşik ${"%.2f".format(threshold)})."
+                else "Kayıt yok: \"Jarvis\" diyen herkese (ve bazen şarkılara) tepki verebilir. 5 kez \"Jarvis\" diyerek sesinizi tanıtın.",
+                fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+                Button(onClick = {
+                    if (Permissions.has(context, Manifest.permission.RECORD_AUDIO)) enrolling = true
+                    else message = "Önce mikrofon izni verin (Kurulum sihirbazı)."
+                }) { Text(if (hasPrint) "Yeniden kaydet" else "Sesimi tanıt") }
+                if (hasPrint) OutlinedButton(onClick = { s.voicePrint = ""; hasPrint = false }) { Text("Sil") }
+            }
+            if (hasPrint) {
+                Text("Seçicilik: sizi tanımazsa düşürün, başkalarına tepki verirse artırın.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+                Slider(
+                    value = threshold, onValueChange = { threshold = it }, valueRange = 0.2f..0.9f,
+                    onValueChangeFinished = { s.voiceThreshold = threshold },
+                )
+            }
+
             SectionTitle("Takip dinleme süresi: ${follow.roundToInt()} sn")
             Text(
                 "Cevaptan sonra yeniden \"Jarvis\" demeden konuşabileceğiniz süre. 0: kapalı.",
@@ -192,6 +216,14 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
             }
             Spacer(Modifier.height(40.dp))
         }
+    }
+
+    if (enrolling) {
+        VoiceEnrollDialog(onDone = { ok ->
+            enrolling = false
+            hasPrint = ok
+            threshold = s.voiceThreshold
+        })
     }
 
     if (confirmClear) {
