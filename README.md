@@ -97,8 +97,8 @@ base64 -w0 jarvis.jks > jarvis.b64     # macOS: base64 -i jarvis.jks -o jarvis.b
 `jarvis.jks` dosyasını ve şifreyi güvenli bir yerde sakla. Kaybedersen güncelleme kuramazsın;
 uygulamayı silip yeniden kurman gerekir.
 
-**Secret eklemeden önce ne olur?** İş akışı geçici olarak bir debug anahtarı kullanır ve
-bunu GitHub Actions önbelleğinde tutar, yani derlemeler arasında imza aynı kalır. Ancak
+**Secret eklemeden önce ne olur?** İş akışı ilk derlemede geçici bir anahtar üretir ve
+bunu GitHub Actions önbelleğinde tutar (depoya girmez), yani derlemeler arasında imza aynı kalır. Ancak
 önbellek 7 gün kullanılmazsa silinebilir. Bu yüzden secret'ları ekle. Secret ekledikten
 sonraki ilk güncellemede imza değişeceği için Jarvis'i **bir kez kaldırıp** yeniden kurman gerekir
 (geçmiş ve ayarlar silinir).

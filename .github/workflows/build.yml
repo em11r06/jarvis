@@ -48,12 +48,13 @@ jobs:
           echo "jarvis sözlükte geçiyor mu:"; grep -rac "jarvis" app/src/main/assets/model-en-us || true
           du -sh app/src/main/assets/model-en-us
 
-      # Secret yoksa geçici çözüm: debug anahtarını önbellekte tut ki imza her derlemede aynı kalsın.
-      - name: Debug anahtarını önbellekten al
+      # Secret yoksa geçici çözüm: depoya girmeyen, sadece Actions önbelleğinde duran sabit bir
+      # anahtar. Böylece imza her derlemede aynı kalır. (Kalıcı çözüm: README'deki secret'lar.)
+      - name: Geçici imza anahtarını önbellekten al
         uses: actions/cache@v4
         with:
-          path: ~/.android/debug.keystore
-          key: jarvis-debug-keystore-v1
+          path: ci-keystore
+          key: jarvis-ci-keystore-v2
 
       # Secret girildiyse kendi sabit imza anahtarını kullan (önerilen).
       - name: İmza anahtarını hazırla
@@ -65,7 +66,15 @@ jobs:
             echo "JARVIS_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
             echo "Kendi imza anahtarınız kullanılıyor."
           else
-            echo "::warning::KEYSTORE_BASE64 secret yok, önbellekteki debug anahtarı kullanılıyor. README'deki adımlarla secret ekleyin."
+            echo "::warning::KEYSTORE_BASE64 secret yok, önbellekteki geçici anahtar kullanılıyor. README'deki adımlarla secret ekleyin."
+            if [ ! -f ci-keystore/ci.jks ]; then
+              mkdir -p ci-keystore
+              keytool -genkeypair -keystore ci-keystore/ci.jks -storetype PKCS12 -alias jarvis \
+                -keyalg RSA -keysize 2048 -validity 10000 -storepass jarvis-ci -keypass jarvis-ci \
+                -dname "CN=Jarvis CI, C=TR"
+            fi
+            echo "JARVIS_KEYSTORE_FILE=$PWD/ci-keystore/ci.jks" >> "$GITHUB_ENV"
+            echo "JARVIS_CI_KEY=1" >> "$GITHUB_ENV"
           fi
 
       - name: APK derle
@@ -74,6 +83,9 @@ jobs:
           JARVIS_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           JARVIS_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
+          if [ "$JARVIS_CI_KEY" = "1" ]; then
+            export JARVIS_KEYSTORE_PASSWORD=jarvis-ci JARVIS_KEY_ALIAS=jarvis JARVIS_KEY_PASSWORD=jarvis-ci
+          fi
           ./gradlew --no-daemon assembleRelease
           cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/Jarvis.apk"
 
