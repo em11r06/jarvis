@@ -36,7 +36,8 @@ class GeminiProvider(
         // Her Gemini modelinin ayrı ücretsiz kotası var: seçili modelin kotası dolarsa
         // sıradaki modele geçilir. Kotası dolan model bir süre atlanır.
         val now = System.currentTimeMillis()
-        val candidates = (listOf(model()) + FALLBACK_MODELS).distinct().filter { (exhausted[it] ?: 0) < now }
+        // Her istekte en üstteki (seçili) modelden başlanır; kotası yenilenmemiş olanlar atlanır.
+        val candidates = (listOf(model()) + FALLBACK_MODELS).distinct().filter { GeminiQuota.isAvailable(it, now) }
         if (candidates.isEmpty()) throw AiException(QUOTA_MSG)
 
         var res: Http.Result? = null
@@ -63,12 +64,8 @@ class GeminiProvider(
             }
             val code = res!!.code
             when {
-                code == 429 -> {
-                    // Günlük kota dolduysa saatlerce, dakikalık sınırsa kısa süre atla.
-                    val daily = res.body.contains("PerDay", ignoreCase = true) || res.body.contains("free_tier_requests")
-                    exhausted[m] = now + if (daily) 6 * 3600_000L else 60_000L
-                }
-                code == 404 || code >= 500 -> exhausted[m] = now + 10 * 60_000L
+                code == 429 -> GeminiQuota.markExhausted(m, res.body, now)
+                code == 404 || code >= 500 -> GeminiQuota.markUnavailable(m, 10 * 60_000L, now)
                 else -> break
             }
         }
@@ -98,6 +95,7 @@ class GeminiProvider(
                 )
             }
         }
+        GeminiQuota.markUsed(usedModel)
         // Ham içerik sadece aynı modele aynen geri gönderilir (thoughtSignature modele özel).
         return AiReply(Turn.Assistant(text.toString().trim(), calls, content, "$id:$usedModel"))
     }
@@ -171,9 +169,6 @@ class GeminiProvider(
             """{"thinkingBudget":0}""",
             null,
         )
-
-        /** Kotası dolan modeller ve ne zamana kadar atlanacakları. */
-        private val exhausted = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
         const val QUOTA_MSG = "Gemini'nin bugünkü ücretsiz kotası doldu efendim. Kota her gün saat on civarında yenileniyor. " +
             "Beklemek istemezseniz Ayarlar'dan Claude'a geçebilir ya da Google AI Studio'da faturalandırmayı açabilirsiniz."

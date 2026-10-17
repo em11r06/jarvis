@@ -2,6 +2,7 @@ package com.jarvis.assistant
 
 import android.app.Application
 import com.jarvis.assistant.accessibility.JarvisAccessibilityService
+import com.jarvis.assistant.ai.GeminiQuota
 import com.jarvis.assistant.core.AssistantController
 import com.jarvis.assistant.data.HistoryStore
 import com.jarvis.assistant.data.Settings
@@ -22,6 +23,7 @@ class JarvisApp : Application() {
         super.onCreate()
         instance = this
         settings = Settings(this)
+        GeminiQuota.init(this)
         assistant = AssistantController(this, settings, HistoryStore(this))
         WakeWordService.createChannels(this)
 

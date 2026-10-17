@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jarvis.assistant.JarvisApp
+import com.jarvis.assistant.ai.GeminiQuota
 import com.jarvis.assistant.core.Permissions
 import com.jarvis.assistant.data.Settings
 import com.jarvis.assistant.update.Updater
@@ -87,6 +88,16 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
                 geminiModel, { geminiModel = it; s.geminiModel = it },
                 label = { Text("Model adı") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
             )
+            val active by GeminiQuota.activeModel.collectAsStateWithLifecycle()
+            val resetAt = GeminiQuota.blockedUntil(geminiModel)
+            val quotaText = buildString {
+                if (resetAt > System.currentTimeMillis()) {
+                    val time = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date(resetAt))
+                    append("Ana modelin kotası doldu; saat $time'de kendiliğinden ona dönülecek. ")
+                }
+                if (active.isNotBlank()) append("Son cevabı veren model: $active")
+            }
+            if (quotaText.isNotBlank()) Text(quotaText, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
 
             SectionTitle("Claude")
             SecretField("Claude API anahtarı", claudeKey, { claudeKey = it; s.claudeKey = it })

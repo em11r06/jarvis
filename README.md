@@ -190,5 +190,7 @@ Kararsız kaldığım yerlerde şunları seçtim:
 - Samsung güç menüsü tasarımı One UI sürümüyle değişirse `yeniden_baslat` düğmeyi bulamayabilir. Araç "Yeniden başlat", "Restart" ve "Reboot" yazılarını arar.
 - Gemini ücretsiz katmanında model başına **günlük istek sınırı** var (ör. 20/gün) ve her araç kullanımı ayrı istek sayılır.
   Jarvis seçili modelin kotası dolunca sırayla `gemini-flash-latest`, `gemini-flash-lite-latest`, `gemini-2.5-flash`,
-  `gemini-2.5-flash-lite` modellerine geçer (her birinin ayrı kotası var). Hepsi dolarsa kota ertesi gün (TR ~10:00) yenilenir;
+  `gemini-2.5-flash-lite` modellerine geçer (her birinin ayrı kotası var). Kotası dolan model, Google'ın kotayı sıfırladığı ana kadar (günlük kota: Pasifik saatiyle gece yarısı = TR 10:00/11:00;
+  dakikalık sınır: Google'ın bildirdiği bekleme süresi) atlanır ve sonra Jarvis kendiliğinden yine seçili modeli kullanır
+  (bilgi telefonda saklanır; Ayarlar'da hangi modelin kullanıldığı görünür). Hepsi dolarsa kota ertesi gün yenilenir;
   sınırsız kullanım için AI Studio'da faturalandırmayı açmak ya da Claude'a geçmek gerekir.
