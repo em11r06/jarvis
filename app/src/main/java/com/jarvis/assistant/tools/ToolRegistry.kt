@@ -40,6 +40,7 @@ object ToolRegistry {
         EkranGoruntusuTool(),
         EkraniKilitleTool(),
         YenidenBaslatTool(),
+        OncekiEkranaDonTool(),
     )
 
     fun find(name: String): Tool? = all.firstOrNull { it.name == name }

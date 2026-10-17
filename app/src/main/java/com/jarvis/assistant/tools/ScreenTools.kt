@@ -13,10 +13,14 @@ private const val NO_SERVICE =
 abstract class ScreenTool : Tool {
     final override suspend fun run(ctx: Context, args: JSONObject): String {
         val s = JarvisAccessibilityService.instance ?: return NO_SERVICE
+        if (needsUnlock && com.jarvis.assistant.core.ScreenReturn.isLocked(ctx)) return com.jarvis.assistant.core.ScreenReturn.LOCKED_MSG
         return run(s, args)
     }
 
     abstract suspend fun run(s: JarvisAccessibilityService, args: JSONObject): String
+
+    /** Bu araç kilit ekranının arkasında çalışamaz mı? */
+    protected open val needsUnlock: Boolean = true
 
     /** İşlemden sonra ekranın yeni hâlini kısaca döndürür; yapay zeka bir sonraki adımı buna göre seçer. */
     protected suspend fun after(s: JarvisAccessibilityService, msg: String, wait: Long = 900): String {
@@ -86,6 +90,7 @@ open class GlobalActionTool(
     private val action: Int,
     private val okMsg: String,
     private val readAfter: Boolean = true,
+    override val needsUnlock: Boolean = false,
 ) : ScreenTool() {
     override val parameters = Schema.empty()
     override suspend fun run(s: JarvisAccessibilityService, args: JSONObject): String {
@@ -131,4 +136,13 @@ class YenidenBaslatTool : ScreenTool() {
         }
         return if (clicks > 0) "Yeniden başlatma komutu verildi." else "Güç menüsünde 'Yeniden başlat' bulunamadı."
     }
+}
+
+/** İş bitince kullanıcıyı işten önceki ekrana (uygulama ya da ana ekran) geri götürür. */
+class OncekiEkranaDonTool : Tool {
+    override val name = "onceki_ekrana_don"
+    override val description = "Başka bir uygulamada yaptığın iş bitince kullanıcıyı kaldığı ekrana geri götürür."
+    override val parameters = Schema.empty()
+    override suspend fun run(ctx: android.content.Context, args: JSONObject) =
+        com.jarvis.assistant.core.ScreenReturn.restore(ctx)
 }

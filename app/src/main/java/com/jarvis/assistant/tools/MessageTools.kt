@@ -88,7 +88,10 @@ class WhatsappGonderTool : Tool {
             return "$who kişisine WhatsApp'tan gönderildi (arka planda)."
         }
 
-        // 2) Sohbeti mesaj yazılı açıp gönder'e bas.
+        // 2) Sohbeti mesaj yazılı açıp gönder'e bas (ekran kilitliyse olmaz).
+        if (com.jarvis.assistant.core.ScreenReturn.isLocked(ctx)) {
+            return "$who kişisinden bekleyen bildirim olmadığı için arka planda gönderemedim. " + com.jarvis.assistant.core.ScreenReturn.LOCKED_MSG
+        }
         val pkg = WA_PACKAGES.firstOrNull { ctx.packageManager.getLaunchIntentForPackage(it) != null }
             ?: return "WhatsApp yüklü değil."
         val (contact, options) = Contacts.resolve(ctx, who)
@@ -120,9 +123,8 @@ class WhatsappGonderTool : Tool {
             }
         }
         if (!sent) return "WhatsApp açıldı ama gönder düğmesini bulamadım. ${contact.name} WhatsApp kullanmıyor olabilir; mesaj kutuda yazılı duruyor."
-        // Kullanıcıyı önceki uygulamaya geri götür.
-        val back = previous?.let { ctx.packageManager.getLaunchIntentForPackage(it) }
-        if (back == null || !Launcher.start(ctx, back)) acc.global(AccessibilityService.GLOBAL_ACTION_HOME)
+        // Kullanıcıyı kaldığı yere geri götür.
+        com.jarvis.assistant.core.ScreenReturn.restore(ctx, previous ?: com.jarvis.assistant.core.ScreenReturn.startPackage)
         return "${contact.name} kişisine WhatsApp'tan gönderildi."
     }
 
@@ -181,6 +183,8 @@ class SohbetiOkuTool : Tool {
         val pkg = WhatsappGonderTool.WA_PACKAGES.firstOrNull { ctx.packageManager.getLaunchIntentForPackage(it) != null }
             ?: return "WhatsApp yüklü değil."
 
+        if (com.jarvis.assistant.core.ScreenReturn.isLocked(ctx)) return com.jarvis.assistant.core.ScreenReturn.LOCKED_MSG
+        val previous = acc.foregroundPackage()
         val who = args.optString("kisi").trim()
         if (who.isNotEmpty()) {
             val self = normalizeName(who) in setOf("kendim", "ben", "kendime", "kendi", "kendimle", "kendi sohbetim")
@@ -229,6 +233,8 @@ class SohbetiOkuTool : Tool {
             if (!acc.scrollListBackward(pkg)) break
             delay(450)
         }
+        // Sohbeti biz açtıysak kullanıcıyı kaldığı yere geri götür.
+        if (who.isNotEmpty() && previous != pkg) com.jarvis.assistant.core.ScreenReturn.restore(ctx, previous)
         if (collected.isEmpty()) return "Sohbette okunabilir mesaj bulamadım (sadece fotoğraf/ses olabilir)."
         val last = collected.takeLast(want)
         return "Sohbetteki son ${last.size} mesaj (eskiden yeniye):\n" + last.mapIndexed { i, t -> "${i + 1}. $t" }.joinToString("\n")
