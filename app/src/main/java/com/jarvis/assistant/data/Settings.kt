@@ -50,6 +50,8 @@ class Settings(context: Context) {
     var cloudStt by bool("cloud_stt", true)
     /** Jarvis konuşurken uyandırma kelimesiyle sözünü kesebilme. */
     var bargeIn by bool("barge_in", true)
+    /** Mikrofon hassasiyeti: 0 düşük (gürültülü ortam), 1 normal, 2 yüksek (uzaktan/kısık sesle duyar). */
+    var micSensitivity by int("mic_sensitivity", 1)
     /** Bluetooth kulaklık takılıyken kulaklığın mikrofonuyla dinle (müzik kalitesi düşer). */
     var headsetMic by bool("headset_mic", false)
     /** Uyanınca ne yapsın: WAKE_SPEAK (söz), WAKE_BEEP, WAKE_FILE (seçilen ses dosyası), WAKE_SILENT. */

@@ -87,10 +87,19 @@ class CloudListener(private val context: Context, private val settings: Settings
         var frames = 0
         var speechFrames = 0
         var voiced = 0
+        val effects = mutableListOf<android.media.audiofx.AudioEffect>()
+        // Hassasiyet: ortam gürültüsünün kaç katı ses "konuşma" sayılır ve en düşük ses seviyesi.
+        val (factor, floor) = when (settings.micSensitivity) { 0 -> 3.0 to 450.0; 2 -> 1.8 to 150.0; else -> 2.3 to 250.0 }
         var silenceMs = 0
         var started = false
         var elapsed = 0
         try {
+            // Kısık/uzak sesi yükselt ve gürültüyü azalt (telefon destekliyorsa).
+            val agc = if (android.media.audiofx.AutomaticGainControl.isAvailable())
+                runCatching { android.media.audiofx.AutomaticGainControl.create(rec.audioSessionId)?.apply { enabled = true } }.getOrNull() else null
+            val ns = if (android.media.audiofx.NoiseSuppressor.isAvailable())
+                runCatching { android.media.audiofx.NoiseSuppressor.create(rec.audioSessionId)?.apply { enabled = true } }.getOrNull() else null
+            effects += listOfNotNull(agc, ns)
             rec.startRecording()
             while (coroutineContext.isActive) {
                 val n = rec.read(buf, 0, frame)
@@ -108,7 +117,7 @@ class CloudListener(private val context: Context, private val settings: Settings
                 if (frames <= 15) { // ilk 300 ms: ortam gürültüsü
                     noise = if (frames == 1) rms else noise * 0.8 + rms * 0.2
                 }
-                val threshold = maxOf(noise * 2.5, 300.0)
+                val threshold = maxOf(noise * factor, floor)
                 val loud = rms > threshold
                 if (!started) {
                     preRoll.addLast(bytes)
@@ -134,6 +143,8 @@ class CloudListener(private val context: Context, private val settings: Settings
             }
         } finally {
             runCatching { rec.stop() }
+            effects.forEach { runCatching { it.release() } }
+            effects.clear()
             rec.release()
         }
         // Çok kısa ses (öksürük, tık) konuşma sayılmaz.
@@ -145,7 +156,7 @@ class CloudListener(private val context: Context, private val settings: Settings
         val key = settings.geminiKey
         if (key.isBlank()) throw IllegalStateException("Gemini anahtarı yok")
         if (GeminiQuota.billingBlocked()) throw IllegalStateException("Gemini bakiyesi bitti")
-        val wav = wav(pcm)
+        val wav = wav(normalize(pcm))
         val prompt = buildString {
             append("Bu ses kaydında bir kişi telefonundaki Türkçe sesli asistanla (adı Jarvis) konuşuyor. ")
             append("Bu bir komut da olabilir, arkadaşıyla konuşur gibi uzun, rahat bir sohbet de: espri, argo, yarım cümle, ")
@@ -193,6 +204,25 @@ class CloudListener(private val context: Context, private val settings: Settings
             return text.takeIf { it.isNotBlank() && it != "-" && it != "—" }
         }
         throw IllegalStateException("Gemini'ye ulaşılamadı ($lastError)")
+    }
+
+    /** Kısık kaydı duyulur seviyeye yükseltir (en fazla 8 kat), patlatmadan. */
+    private fun normalize(pcm: ByteArray): ByteArray {
+        var peak = 1
+        for (i in 0 until pcm.size / 2) {
+            val v = (pcm[i * 2].toInt() and 0xFF) or (pcm[i * 2 + 1].toInt() shl 8)
+            peak = maxOf(peak, kotlin.math.abs(v.toShort().toInt()))
+        }
+        val gain = (22000.0 / peak).coerceIn(1.0, 8.0)
+        if (gain < 1.2) return pcm
+        val out = ByteArray(pcm.size)
+        for (i in 0 until pcm.size / 2) {
+            val v = ((pcm[i * 2].toInt() and 0xFF) or (pcm[i * 2 + 1].toInt() shl 8)).toShort().toInt()
+            val s = (v * gain).toInt().coerceIn(-32768, 32767)
+            out[i * 2] = (s and 0xFF).toByte()
+            out[i * 2 + 1] = (s shr 8).toByte()
+        }
+        return out
     }
 
     private fun wav(pcm: ByteArray): ByteArray {

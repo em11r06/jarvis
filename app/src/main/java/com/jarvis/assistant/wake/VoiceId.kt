@@ -203,9 +203,11 @@ object VoiceId {
         }
         val music = context.getSystemService(AudioManager::class.java).isMusicActive
         val print = loadPrint(settings)
+        // Ses kaydı varsa ses izi zaten doğruluyor; kelime güveni hassasiyete göre biraz esneyebilir.
         val minConf = when {
             music -> 0.95
-            else -> 0.85
+            print == null -> 0.85
+            else -> when (settings.micSensitivity) { 0 -> 0.85; 2 -> 0.65; else -> 0.75 }
         }
         if (hit.confidence < minConf) {
             Log.d(TAG, "Reddedildi: güven ${hit.confidence} < $minConf")
