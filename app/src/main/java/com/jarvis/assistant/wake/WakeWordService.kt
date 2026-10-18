@@ -68,6 +68,7 @@ class WakeWordService : Service() {
 
         if (engine == null) initEngine() else resumeDetection()
         startUpdateChecks()
+        watchAudioRoute()
         return START_STICKY
     }
 
@@ -133,6 +134,41 @@ class WakeWordService : Service() {
         }
     }
 
+    // ------------------------------------------------------------------
+    // Kulaklık takılıp çıkınca ya da müzik başlayıp durunca mikrofon seçimini yenile
+    // ------------------------------------------------------------------
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    private var routeWatching = false
+    private val recheck = Runnable {
+        val e = engine as? VoskEngine ?: return@Runnable
+        if (!listening || inSession) return@Runnable
+        val want = com.jarvis.assistant.core.AudioRoute.micFor(this, JarvisApp.instance.settings, forCommand = false) != null
+        if (want != e.usingBt) {
+            Log.d(TAG, "Mikrofon değişiyor: kulaklık=$want")
+            pauseDetection()
+            resumeDetection()
+        }
+    }
+    private fun scheduleRecheck() {
+        main.removeCallbacks(recheck)
+        main.postDelayed(recheck, 1500)
+    }
+    private val deviceCallback = object : android.media.AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(addedDevices: Array<out android.media.AudioDeviceInfo>?) = scheduleRecheck()
+        override fun onAudioDevicesRemoved(removedDevices: Array<out android.media.AudioDeviceInfo>?) = scheduleRecheck()
+    }
+    private val playbackCallback = object : AudioManager.AudioPlaybackCallback() {
+        override fun onPlaybackConfigChanged(configs: MutableList<android.media.AudioPlaybackConfiguration>?) = scheduleRecheck()
+    }
+
+    private fun watchAudioRoute() {
+        if (routeWatching) return
+        routeWatching = true
+        val am = getSystemService(AudioManager::class.java)
+        am.registerAudioDeviceCallback(deviceCallback, main)
+        am.registerAudioPlaybackCallback(playbackCallback, main)
+    }
+
     private var updateJob: kotlinx.coroutines.Job? = null
 
     /** Servis çalıştığı sürece yeni sürüm kontrolü (6 saatte bir; bildirimle haber verir). */
@@ -148,6 +184,13 @@ class WakeWordService : Service() {
 
     override fun onDestroy() {
         running.value = false
+        if (routeWatching) {
+            val am = getSystemService(AudioManager::class.java)
+            runCatching { am.unregisterAudioDeviceCallback(deviceCallback) }
+            runCatching { am.unregisterAudioPlaybackCallback(playbackCallback) }
+            routeWatching = false
+        }
+        main.removeCallbacks(recheck)
         val assistant = JarvisApp.instance.assistant
         assistant.beforeListen = null
         assistant.afterSession = null

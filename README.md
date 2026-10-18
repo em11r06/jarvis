@@ -162,8 +162,10 @@ rehberindeki isimleri, uygulama adlarını ve konuşmanın bağlamını bildiği
 Gemini'ye ulaşılamazsa telefonun kendi tanıyıcısı kullanılır. Her konuşma küçük bir Gemini isteği harcar.
 
 **Sözünü kesmek:** Jarvis konuşurken uyandırma kelimesini söyle; susar ve seni dinler (Ayarlar'dan kapatılabilir).
-**Kulaklıkla:** Kulaklık takılıyken ses kimliği eşiği biraz gevşer. Yine duymazsa "Bluetooth kulaklığın mikrofonunu kullan"ı aç
-(kulaklık görüşme moduna geçtiği için müzik kalitesi düşer).
+**Kulaklıkla (Otomatik):** Bluetooth kulaklık (saat değil) bağlanınca Jarvis komutlarını kulaklığın mikrofonundan dinler.
+Uyandırma kelimesini müzik çalmıyorsa kulaklıktan, çalıyorsa (müzik kalitesi bozulmasın diye) telefondan dinler; kulaklık
+takılıp çıkınca ya da müzik başlayıp durunca kendini ayarlar. Ayarlar'dan "Hep açık" ya da "Kapalı" seçilebilir.
+**Mikrofon hassasiyeti (Otomatik):** Ortam gürültüsü sürekli ölçülür; sessiz yerde daha hassas, gürültülü yerde daha seçici olur.
 
 **Uyandırma kelimesi:** Ayarlar > Uyandırma kelimesi'ne istediğin kelimeleri virgülle yaz (ör. `jarvis, can, hey x`).
 İngilizce kelimeler hazır modelle çalışır. Türkçe kelimeler için **Türkçe modeli indir**'e bir kez bas (~35 MB, telefona iner).

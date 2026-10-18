@@ -71,7 +71,7 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
     var bargeIn by remember { mutableStateOf(s.bargeIn) }
     var micSens by remember { mutableStateOf(s.micSensitivity) }
     var cloudStt by remember { mutableStateOf(s.cloudStt) }
-    var headsetMic by remember { mutableStateOf(s.headsetMic) }
+    var headsetMode by remember { mutableStateOf(s.headsetMicMode) }
     var wordsChanged by remember { mutableStateOf(false) }
     var testingWake by remember { mutableStateOf(false) }
     var hasTr by remember { mutableStateOf(com.jarvis.assistant.wake.VoskModels.hasTurkish(context)) }
@@ -303,28 +303,29 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
                 }
                 Switch(checked = bargeIn, onCheckedChange = { bargeIn = it; s.bargeIn = it })
             }
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
-                Column(Modifier.weight(1f)) {
-                    Text("Bluetooth kulaklığın mikrofonunu kullan", color = MaterialTheme.colorScheme.onSurface)
-                    Text(
-                        "Kulaklıkla sizi duymuyorsa açın. Telefon cepteyken bile duyar ama kulaklık görüşme moduna geçer: müzik kalitesi düşer, pil biraz daha gider.",
-                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(checked = headsetMic, onCheckedChange = {
-                    headsetMic = it
-                    s.headsetMic = it
-                    if (wakeRunning) scope.launch { WakeWordService.stop(context); kotlinx.coroutines.delay(700); WakeWordService.start(context) }
-                })
-            }
-
-            Text("Mikrofon hassasiyeti", color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 10.dp))
+            Text("Bluetooth kulaklığın mikrofonu", color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 10.dp))
             Text(
-                "Sizi zor duyuyorsa Yüksek'i seçin. Gürültülü yerde (kafe, TV açık) yanlışlıkla dinliyorsa Düşük'ü seçin.",
+                "Otomatik: kulaklık (saat değil) bağlanınca komutlarınızı kulaklıktan dinler; uyandırma kelimesini müzik çalmıyorsa kulaklıktan, " +
+                    "çalıyorsa (müzik kalitesi bozulmasın diye) telefondan dinler. Hep açık: her zaman kulaklıktan (müzik kalitesi düşer).",
                 fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(0 to "Düşük", 1 to "Normal", 2 to "Yüksek").forEach { (v, label) ->
+                listOf(Settings.HEADSET_AUTO to "Otomatik", Settings.HEADSET_ALWAYS to "Hep açık", Settings.HEADSET_OFF to "Kapalı").forEach { (v, label) ->
+                    FilterChip(headsetMode == v, {
+                        headsetMode = v
+                        s.headsetMicMode = v
+                        if (wakeRunning) scope.launch { WakeWordService.stop(context); kotlinx.coroutines.delay(700); WakeWordService.start(context) }
+                    }, { Text(label) })
+                }
+            }
+            Text("Mikrofon hassasiyeti", color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 10.dp))
+            Text(
+                "Otomatik: ortam gürültüsünü ölçüp sessiz yerde daha hassas, gürültülü yerde daha seçici olur. " +
+                    "Yine de zor duyuyorsa Yüksek'i, gürültüde yanlışlıkla dinliyorsa Düşük'ü seçin.",
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(Settings.SENS_AUTO to "Otomatik", 0 to "Düşük", 1 to "Normal", 2 to "Yüksek").forEach { (v, label) ->
                     FilterChip(micSens == v, { micSens = v; s.micSensitivity = v }, { Text(label) })
                 }
             }

@@ -71,8 +71,23 @@ class CloudListener(private val context: Context, private val settings: Settings
         val rate = SAMPLE_RATE
         val frame = rate / 50 // 20 ms
         val min = AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+        // Bluetooth kulaklık takılıysa komutu kulaklığın mikrofonundan dinle (telefon uzakta/cepte olabilir).
+        val am = context.getSystemService(android.media.AudioManager::class.java)
+        val bt = com.jarvis.assistant.core.AudioRoute.micFor(context, settings, forCommand = true)
+        val routed = bt != null && runCatching { am.setCommunicationDevice(bt) }.getOrDefault(false)
+        if (routed) kotlinx.coroutines.delay(400) // kulaklığın mikrofonu açılsın
+        try {
+            return recordFrom(rate, frame, min, startTimeoutMs, onPartial, voiceComm = routed)
+        } finally {
+            if (routed) runCatching { am.clearCommunicationDevice() }
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private suspend fun recordFrom(rate: Int, frame: Int, min: Int, startTimeoutMs: Long, onPartial: (String) -> Unit, voiceComm: Boolean): ByteArray? {
         val rec = AudioRecord(
-            MediaRecorder.AudioSource.VOICE_RECOGNITION, rate, AudioFormat.CHANNEL_IN_MONO,
+            // Bluetooth mikrofonu "görüşme" kaynağından gelir.
+            if (voiceComm) MediaRecorder.AudioSource.VOICE_COMMUNICATION else MediaRecorder.AudioSource.VOICE_RECOGNITION, rate, AudioFormat.CHANNEL_IN_MONO,
             AudioFormat.ENCODING_PCM_16BIT, maxOf(min, frame * 2 * 10),
         )
         if (rec.state != AudioRecord.STATE_INITIALIZED) {
@@ -89,7 +104,7 @@ class CloudListener(private val context: Context, private val settings: Settings
         var voiced = 0
         val effects = mutableListOf<android.media.audiofx.AudioEffect>()
         // Hassasiyet: ortam gürültüsünün kaç katı ses "konuşma" sayılır ve en düşük ses seviyesi.
-        val (factor, floor) = when (settings.micSensitivity) { 0 -> 3.0 to 450.0; 2 -> 1.8 to 150.0; else -> 2.3 to 250.0 }
+        val (factor, floor) = when (com.jarvis.assistant.core.Ambient.sensitivity(settings)) { 0 -> 3.0 to 450.0; 2 -> 1.8 to 150.0; else -> 2.3 to 250.0 }
         var silenceMs = 0
         var started = false
         var elapsed = 0

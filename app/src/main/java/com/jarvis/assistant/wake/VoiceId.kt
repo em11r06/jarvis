@@ -207,7 +207,7 @@ object VoiceId {
         val minConf = when {
             music -> 0.95
             print == null -> 0.85
-            else -> when (settings.micSensitivity) { 0 -> 0.85; 2 -> 0.65; else -> 0.75 }
+            else -> when (com.jarvis.assistant.core.Ambient.sensitivity(settings)) { 0 -> 0.85; 2 -> 0.65; else -> 0.75 }
         }
         if (hit.confidence < minConf) {
             Log.d(TAG, "Reddedildi: güven ${hit.confidence} < $minConf")
@@ -434,6 +434,10 @@ class MicLoop(
                 while (running) {
                     val n = r.read(buf, 0, buf.size)
                     if (n <= 0) continue
+                    // Ortam gürültüsünü ölç (otomatik hassasiyet için).
+                    var sum = 0.0
+                    for (i in 0 until n) sum += buf[i].toDouble() * buf[i]
+                    com.jarvis.assistant.core.Ambient.feed(kotlin.math.sqrt(sum / n))
                     // Aynı ses parçası her tanıyıcıya verilir (ör. İngilizce + Türkçe model).
                     for (rec in recognizers) {
                         if (rec.acceptWaveForm(buf, n)) {

@@ -78,6 +78,10 @@ class VoskEngine(
     private var loop: MicLoop? = null
     private var lastWake = 0L
 
+    /** Şu an Bluetooth kulaklığın mikrofonuyla mı dinleniyor? (Durum değişince servis yeniden başlatır.) */
+    var usingBt = false
+        private set
+
     override fun init(onReady: () -> Unit, onError: (String) -> Unit) {
         scope.launch {
             try {
@@ -103,7 +107,8 @@ class VoskEngine(
                 trModel?.let { VoskModels.recognizer(it, speaker, phrases, english = false) },
             )
             recognizers = recs
-            val bt = if (settings.headsetMic) com.jarvis.assistant.core.AudioRoute.bluetoothMic(context) else null
+            val bt = com.jarvis.assistant.core.AudioRoute.micFor(context, settings, forCommand = false)
+            usingBt = bt != null
             loop = MicLoop(recs, ::onResult, { msg -> onFail("Uyandırma hatası: $msg") }, bt, context).also { it.start() }
         } catch (e: Exception) {
             loop = null

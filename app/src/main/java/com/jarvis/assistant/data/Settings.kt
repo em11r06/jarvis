@@ -50,10 +50,10 @@ class Settings(context: Context) {
     var cloudStt by bool("cloud_stt", true)
     /** Jarvis konuşurken uyandırma kelimesiyle sözünü kesebilme. */
     var bargeIn by bool("barge_in", true)
-    /** Mikrofon hassasiyeti: 0 düşük (gürültülü ortam), 1 normal, 2 yüksek (uzaktan/kısık sesle duyar). */
-    var micSensitivity by int("mic_sensitivity", 1)
-    /** Bluetooth kulaklık takılıyken kulaklığın mikrofonuyla dinle (müzik kalitesi düşer). */
-    var headsetMic by bool("headset_mic", false)
+    /** Mikrofon hassasiyeti: 0 düşük (gürültülü ortam), 1 normal, 2 yüksek (uzaktan/kısık sesle duyar), SENS_AUTO ortama göre. */
+    var micSensitivity by int("mic_sensitivity_v2", SENS_AUTO)
+    /** Bluetooth kulaklığın mikrofonu: HEADSET_OFF, HEADSET_AUTO (varsayılan), HEADSET_ALWAYS. */
+    var headsetMicMode by int("headset_mic_mode", HEADSET_AUTO)
     /** Uyanınca ne yapsın: WAKE_SPEAK (söz), WAKE_BEEP, WAKE_FILE (seçilen ses dosyası), WAKE_SILENT. */
     var wakeSound: String
         get() = prefs.getString("wake_sound", null) ?: if (wakeGreeting) WAKE_SPEAK else WAKE_BEEP
@@ -109,6 +109,10 @@ class Settings(context: Context) {
     }
 
     companion object {
+        const val SENS_AUTO = 3
+        const val HEADSET_OFF = 0
+        const val HEADSET_AUTO = 1
+        const val HEADSET_ALWAYS = 2
         const val WAKE_SPEAK = "speak"
         const val WAKE_BEEP = "beep"
         const val WAKE_FILE = "file"
