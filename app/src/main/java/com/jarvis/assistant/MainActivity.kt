@@ -67,7 +67,8 @@ class MainActivity : ComponentActivity() {
                         confirmButton = {
                             TextButton(onClick = {
                                 dismissedVersion = ready.version
-                                Updater.install(this@MainActivity)
+                                val msg = Updater.install(this@MainActivity)
+                                android.widget.Toast.makeText(this@MainActivity, msg, android.widget.Toast.LENGTH_LONG).show()
                             }) { Text("Güncelle") }
                         },
                         dismissButton = { TextButton(onClick = { dismissedVersion = ready.version }) { Text("Sonra") } },

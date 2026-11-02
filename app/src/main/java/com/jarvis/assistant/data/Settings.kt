@@ -90,6 +90,47 @@ class Settings(context: Context) {
 
     var setupDone by bool("setup_done", false)
 
+    /** Tüm ayarları JSON olarak verir (yedek için). */
+    fun exportJson(): String {
+        val o = org.json.JSONObject()
+        prefs.all.forEach { (k, v) ->
+            val typed = org.json.JSONObject()
+            when (v) {
+                is String -> typed.put("s", v)
+                is Int -> typed.put("i", v)
+                is Long -> typed.put("l", v)
+                is Float -> typed.put("f", v.toDouble())
+                is Boolean -> typed.put("b", v)
+                else -> return@forEach
+            }
+            o.put(k, typed)
+        }
+        return org.json.JSONObject().put("jarvis_backup", 1).put("prefs", o).toString(2)
+    }
+
+    /** Yedekten ayarları geri yükler. @return yüklenen ayar sayısı */
+    fun importJson(json: String): Int {
+        val root = org.json.JSONObject(json)
+        require(root.has("jarvis_backup")) { "Bu bir Jarvis yedeği değil" }
+        val o = root.getJSONObject("prefs")
+        val e = prefs.edit()
+        var n = 0
+        o.keys().forEach { k ->
+            val t = o.getJSONObject(k)
+            when {
+                t.has("s") -> e.putString(k, t.getString("s"))
+                t.has("i") -> e.putInt(k, t.getInt("i"))
+                t.has("l") -> e.putLong(k, t.getLong("l"))
+                t.has("f") -> e.putFloat(k, t.getDouble("f").toFloat())
+                t.has("b") -> e.putBoolean(k, t.getBoolean("b"))
+                else -> return@forEach
+            }
+            n++
+        }
+        e.commit()
+        return n
+    }
+
     private fun str(key: String, def: String) = object : ReadWriteProperty<Any?, String> {
         override fun getValue(thisRef: Any?, property: KProperty<*>) = prefs.getString(key, def) ?: def
         override fun setValue(thisRef: Any?, property: KProperty<*>, value: String) =

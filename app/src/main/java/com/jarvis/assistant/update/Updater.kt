@@ -168,6 +168,16 @@ object Updater {
         Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
 
     /** Kurulum ekranını açar. İzin yoksa izin ekranını açar. */
+    /** İndirilen APK, kurulu uygulamayla aynı anahtarla mı imzalanmış? (Değilse Android "uygulama yüklenmedi" der.) */
+    private fun sameSigner(context: Context, apk: File): Boolean = runCatching {
+        val pm = context.packageManager
+        val flags = android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES
+        val mine = pm.getPackageInfo(context.packageName, flags).signingInfo?.apkContentsSigners?.map { it.toCharsString() }?.toSet().orEmpty()
+        val theirs = pm.getPackageArchiveInfo(apk.absolutePath, flags)?.signingInfo?.apkContentsSigners?.map { it.toCharsString() }?.toSet()
+            ?: return@runCatching true // okunamadıysa kurulumu dene
+        mine.isEmpty() || mine == theirs
+    }.getOrDefault(true)
+
     fun install(context: Context): String {
         val ready = _state.value as? State.Ready ?: fromCache(context) ?: return "Kurulacak güncelleme yok."
         if (!ready.file.exists()) {
@@ -177,6 +187,10 @@ object Updater {
         if (!canInstall(context)) {
             Launcher.start(context, permissionIntent(context))
             return "Önce Jarvis'e 'bilinmeyen uygulamaları yükleme' izni verin, sonra tekrar güncelle deyin."
+        }
+        if (!sameSigner(context, ready.file)) {
+            return "Bu güncelleme farklı bir imza anahtarıyla imzalanmış; Android üstüne kuramaz. " +
+                "Önce Ayarlar > Güncelleme ve yedek > Yedekle ile ayarlarınızı kaydedin, sonra Jarvis'i silip yeni sürümü kurun ve Geri yükle'ye basın."
         }
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", ready.file)
         val intent = Intent(Intent.ACTION_VIEW)

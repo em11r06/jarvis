@@ -1,0 +1,25 @@
+name: Önbellek canlı tut
+
+# GitHub, 7 gün kullanılmayan önbellekleri siler. İmza anahtarı da önbellekte durduğu için
+# silinirse yeni sürüm farklı anahtarla imzalanır ve telefona güncelleme olarak kurulamaz.
+# Bu iş birkaç günde bir önbellekleri okuyarak silinmelerini engeller.
+on:
+  schedule:
+    - cron: "17 5 */2 * *"
+  workflow_dispatch:
+
+jobs:
+  touch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: İmza anahtarı önbelleğini oku
+        uses: actions/cache/restore@v4
+        with:
+          path: ci-keystore
+          key: jarvis-ci-keystore-v2
+      - name: Ses modeli önbelleğini oku
+        uses: actions/cache/restore@v4
+        with:
+          path: vosk-model
+          key: vosk-models-en-us-0.15-spk-0.4
+      - run: ls -la ci-keystore || echo "Anahtar önbellekte yok!"
