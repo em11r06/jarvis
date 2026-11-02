@@ -66,7 +66,7 @@ object VoiceCatalog {
 
     suspend fun elevenVoices(apiKey: String): List<ElevenVoice> {
         val res = Http.get("https://api.elevenlabs.io/v1/voices", mapOf("xi-api-key" to apiKey))
-        if (res.code !in 200..299) throw IllegalStateException("ElevenLabs hatası ${res.code}")
+        if (res.code !in 200..299) throw ElevenException.from(res.code, res.body)
         val arr = JSONObject(res.body).optJSONArray("voices") ?: return emptyList()
         return (0 until arr.length()).map { i ->
             val v = arr.getJSONObject(i)

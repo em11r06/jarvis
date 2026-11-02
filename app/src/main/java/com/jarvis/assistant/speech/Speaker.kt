@@ -403,7 +403,8 @@ class ElevenException(message: String) : Exception(message) {
                     "Bu ses ID hesabınızda bulunamadı. Sesi önce ElevenLabs'te 'My Voices'a ekleyin."
                 status.contains("missing_permissions") ->
                     "API anahtarında gerekli izin yok. Anahtarı 'Text to Speech' ve 'Voices: Read' izinleriyle yeniden oluşturun."
-                code == 401 -> "ElevenLabs anahtarı geçersiz."
+                code == 401 -> "ElevenLabs anahtarı kabul edilmedi. Anahtarı ElevenLabs'te (Developers > API Keys) yeniden kopyalayıp " +
+                    "yapıştırın; anahtar oluştururken izinlerde 'Text to Speech' ve 'Voices' (Read) açık olmalı."
                 code == 429 -> "ElevenLabs çok fazla istek dedi, biraz sonra deneyin."
                 else -> "ElevenLabs hatası ($code)"
             }

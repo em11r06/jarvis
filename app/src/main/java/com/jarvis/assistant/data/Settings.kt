@@ -33,7 +33,10 @@ class Settings(context: Context) {
     var ttsVoice by str("tts_voice", "")
     var ttsRate by float("tts_rate", 1.0f)
     var ttsPitch by float("tts_pitch", 1.0f)
-    var elevenKey by str("eleven_key", "")
+    /** Kopyalarken araya giren görünmez karakterler (boşluk, satır sonu) temizlenir. */
+    var elevenKey: String
+        get() = prefs.getString("eleven_key", "") ?: ""
+        set(value) = prefs.edit().putString("eleven_key", value.filter { it.isLetterOrDigit() || it == '_' || it == '-' }).apply()
     var elevenVoiceId by str("eleven_voice_id", "")
     var elevenVoiceName by str("eleven_voice_name", "")
     var elevenModel by str("eleven_model", ELEVEN_FAST)
