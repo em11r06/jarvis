@@ -52,6 +52,25 @@ class Speaker(private val context: Context, private val settings: Settings) {
 
     private var focusHolds = 0
 
+    /** Dinleme oturumu boyunca müziği/videoyu tamamen durdurmak için (sesi Jarvis'in mikrofonuna karışmasın). */
+    private val pauseFocus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+        .setAudioAttributes(attrs)
+        .build()
+    private var pauseHolds = 0
+
+    /** Müzik/video uygulamalarını duraklatır (ayar kapalıysa sadece kısar). Bitince resumeMedia çağrılmalı. */
+    @Synchronized
+    fun pauseMedia() {
+        if (!settings.pauseMedia) { acquireFocus(); return }
+        if (pauseHolds++ == 0) audio.requestAudioFocus(pauseFocus)
+    }
+
+    @Synchronized
+    fun resumeMedia() {
+        if (!settings.pauseMedia) { releaseFocus(); return }
+        if (pauseHolds > 0 && --pauseHolds == 0) audio.abandonAudioFocusRequest(pauseFocus)
+    }
+
     /**
      * Diğer uygulamaların sesini (müzik, video) kısar. Oturum boyunca da tutulabilir;
      * herkes bıraktığında ses eski hâline döner.

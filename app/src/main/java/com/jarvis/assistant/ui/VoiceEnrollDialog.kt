@@ -26,6 +26,14 @@ import kotlinx.coroutines.delay
 
 private const val SAMPLES = 8
 
+/** Normal konuşma sesini öğrenmek için okunan cümleler. */
+private val SENTENCES = listOf(
+    "Yarın sabah yedide beni uyandır ve hava durumunu söyle.",
+    "Bugün akşam arkadaşlarla buluşacağım, güzel bir mekan önerir misin?",
+    "Sevdiğim şarkıları aç ve sesi biraz yükselt.",
+    "Annemi ara, eve geç kalacağımı söyleyeceğim.",
+)
+
 /** Farklı koşullarda örnek alınsın diye her kayıtta değişen ipuçları. */
 private val TIPS = listOf(
     "Normal sesinizle", "Biraz uzaktan, telefon masada", "Hızlıca, günlük konuşur gibi", "Biraz yüksek sesle",
@@ -43,6 +51,7 @@ fun VoiceEnrollDialog(onDone: (Boolean) -> Unit) {
     var count by remember { mutableIntStateOf(0) }
     var message by remember { mutableStateOf("Hazırlanıyor...") }
     var finished by remember { mutableStateOf(false) }
+    var phase by remember { mutableIntStateOf(1) }
 
     LaunchedEffect(Unit) {
         val wasRunning = WakeWordService.isRunning.value
@@ -70,7 +79,34 @@ fun VoiceEnrollDialog(onDone: (Boolean) -> Unit) {
             }
             if (samples.size >= 4) {
                 VoiceId.saveEnrollment(settings, samples)
-                message = "Sesiniz kaydedildi. Artık sadece size tepki vereceğim."
+                // 2. aşama: normal konuşma sesi. Uyandıktan sonraki cümlelerin size ait olup olmadığı bununla anlaşılır.
+                val recorder = com.jarvis.assistant.speech.CloudListener(context, settings)
+                val long = mutableListOf<FloatArray>()
+                var sentenceMisses = 0
+                var i = 0
+                while (i < SENTENCES.size && sentenceMisses < 6) {
+                    phase = 2
+                    message = "Şimdi bu cümleyi normal sesinizle okuyun (${i + 1}/${SENTENCES.size}):\n\n\"${SENTENCES[i]}\""
+                    val pcm = recorder.recordSentence(10_000)
+                    val vf = pcm?.let { VoiceId.voiceVector(context, it) }
+                    if (vf != null && vf.second >= 120) {
+                        long += vf.first
+                        count = SAMPLES + long.size
+                        message = "Aldım!"
+                        delay(500)
+                        i++
+                    } else {
+                        sentenceMisses++
+                        message = "Tam duyamadım, cümlenin tamamını okuyun."
+                        delay(1200)
+                    }
+                }
+                message = if (long.size >= 3) {
+                    VoiceId.saveLongEnrollment(settings, long)
+                    "Sesiniz kaydedildi. Artık hem uyandırırken hem konuşurken sadece size tepki vereceğim."
+                } else {
+                    "Uyandırma sesiniz kaydedildi ama cümleler alınamadı; konuşma kontrolü daha gevşek çalışacak. Sessiz bir yerde tekrar deneyebilirsiniz."
+                }
             } else {
                 message = "Yeterli kayıt alınamadı. Sessiz bir yerde tekrar deneyin."
             }
@@ -89,9 +125,13 @@ fun VoiceEnrollDialog(onDone: (Boolean) -> Unit) {
             Column {
                 Text(message, fontSize = 16.sp)
                 Spacer(Modifier.height(12.dp))
-                LinearProgressIndicator(progress = { count / SAMPLES.toFloat() })
+                LinearProgressIndicator(progress = { count / (SAMPLES + SENTENCES.size).toFloat() })
                 Spacer(Modifier.height(8.dp))
-                Text("Telefonu her zamanki gibi tutun; müzik varsa kapatın.", fontSize = 12.sp)
+                Text(
+                    if (phase == 1) "Telefonu her zamanki gibi tutun; müzik varsa kapatın."
+                    else "Acele etmeden, her zamanki konuşma sesinizle okuyun.",
+                    fontSize = 12.sp,
+                )
             }
         },
         confirmButton = {

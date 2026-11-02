@@ -121,12 +121,12 @@ class WakeWordService : Service() {
         pauseDetection()
         val speaker = JarvisApp.instance.assistant.speaker
         // Müziği/videoyu hemen kıs; oturum bitene kadar kısık kalsın.
-        speaker.acquireFocus()
+        speaker.pauseMedia()
         playWakeSound(applicationContext)
         try {
             JarvisApp.instance.assistant.voiceSession()
         } finally {
-            speaker.releaseFocus()
+            speaker.resumeMedia()
             inSession = false
             // Oturum biter bitmez Jarvis'in kendi sesinin yankısıyla tekrar uyanmasın.
             VoiceId.quietUntil = System.currentTimeMillis() + 2000

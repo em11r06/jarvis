@@ -70,6 +70,7 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
     var wakeWords by remember { mutableStateOf(s.wakeWords) }
     var bargeIn by remember { mutableStateOf(s.bargeIn) }
     var micSens by remember { mutableStateOf(s.micSensitivity) }
+    var pauseMedia by remember { mutableStateOf(s.pauseMedia) }
     var cloudStt by remember { mutableStateOf(s.cloudStt) }
     var headsetMode by remember { mutableStateOf(s.headsetMicMode) }
     var wordsChanged by remember { mutableStateOf(false) }
@@ -318,6 +319,13 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
                     }, { Text(label) })
                 }
             }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text("Dinlerken müziği durdur", color = MaterialTheme.colorScheme.onSurface)
+                    Text("Siz konuşurken telefonda çalan müzik/video duraklar, bitince devam eder; telefonun kendi sesi karışmaz.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(checked = pauseMedia, onCheckedChange = { pauseMedia = it; s.pauseMedia = it })
+            }
             Text("Mikrofon hassasiyeti", color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 10.dp))
             Text(
                 "Otomatik: ortam gürültüsünü ölçüp sessiz yerde daha hassas, gürültülü yerde daha seçici olur. " +
@@ -332,8 +340,9 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
 
             SectionTitle("Sesimi tanı")
             Text(
-                if (hasPrint) "Sesiniz kayıtlı: Jarvis sadece size tepki verir (eşik ${"%.2f".format(threshold)}). Sizi zor tanıyorsa seçiciliği biraz düşürün ya da sessiz bir yerde yeniden kaydedin."
-                else "Kayıt yok: \"Jarvis\" diyen herkese (ve bazen şarkılara) tepki verebilir. 8 kez \"Jarvis\" diyerek sesinizi tanıtın.",
+                if (hasPrint) "Sesiniz kayıtlı: Jarvis sadece size tepki verir (eşik ${"%.2f".format(threshold)}). Sizi zor tanıyorsa seçiciliği biraz düşürün ya da sessiz bir yerde yeniden kaydedin." +
+                    (if (!com.jarvis.assistant.wake.VoiceId.hasLongEnrollment(s)) "\n\nÖnemli: Konuşma sesiniz henüz kayıtlı değil. \"Yeniden kaydet\" ile birkaç cümle okuyun; böylece uyandıktan sonra sadece sizin sözlerinizi dinlerim." else "")
+                else "Kayıt yok: \"Jarvis\" diyen herkese (ve bazen şarkılara) tepki verebilir. Uyandırma kelimesini 8 kez söyleyip 4 cümle okuyarak sesinizi tanıtın.",
                 fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
@@ -341,7 +350,7 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
                     if (Permissions.has(context, Manifest.permission.RECORD_AUDIO)) enrolling = true
                     else message = "Önce mikrofon izni verin (Kurulum sihirbazı)."
                 }) { Text(if (hasPrint) "Yeniden kaydet" else "Sesimi tanıt") }
-                if (hasPrint) OutlinedButton(onClick = { s.voicePrint = ""; s.voiceSamples = ""; hasPrint = false }) { Text("Sil") }
+                if (hasPrint) OutlinedButton(onClick = { s.voicePrint = ""; s.voiceSamples = ""; s.voiceSamplesLong = ""; s.voiceThresholdLong = 0f; hasPrint = false }) { Text("Sil") }
             }
             if (hasPrint) {
                 Text("Seçicilik: sizi tanımazsa düşürün, başkalarına tepki verirse artırın.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))

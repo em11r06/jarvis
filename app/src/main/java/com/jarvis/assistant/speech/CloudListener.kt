@@ -61,6 +61,9 @@ class CloudListener(private val context: Context, private val settings: Settings
         return if (text.isNullOrBlank()) Result.Unclear else Result.Text(Heard(text, emptyList(), 1f))
     }
 
+    /** Ses tanıtma için tek bir cümle kaydeder (komutlarla aynı yoldan, aynı ayarlarla). */
+    suspend fun recordSentence(timeoutMs: Long): ByteArray? = withContext(Dispatchers.IO) { record(timeoutMs) {} }
+
     /**
      * Konuşma başlayana kadar bekler, sustuktan sonra durur. Basit ses seviyesi ölçümüyle çalışır:
      * ilk anlardaki ortam gürültüsü ölçülür, onun belirgin üstü "konuşma" sayılır.

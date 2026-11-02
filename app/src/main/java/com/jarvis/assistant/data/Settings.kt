@@ -66,6 +66,12 @@ class Settings(context: Context) {
     var voicePrint by str("voice_print", "")
     /** Ses tanıtırken alınan ve sonradan öğrenilen ses örnekleri (";" ile ayrılmış). */
     var voiceSamples by str("voice_samples", "")
+    /** Normal konuşma (cümle) ses izi örnekleri: komutların kullanıcıya ait olup olmadığını anlamak için. */
+    var voiceSamplesLong by str("voice_samples_long", "")
+    /** Cümle ses izi eşiği (0: kayıt yok). */
+    var voiceThresholdLong by float("voice_threshold_long", 0f)
+    /** Dinlerken müzik/videoyu tamamen duraklat (kısmak yerine), bitince devam ettir. */
+    var pauseMedia by bool("pause_media", true)
     /** Eski sürümün otomatik öğrendiği (gürültü olabilecek) örnekler temizlendi mi? */
     var voiceCleaned by bool("voice_cleaned", false)
     /** Ses izi benzerlik eşiği; büyüdükçe daha seçici. */

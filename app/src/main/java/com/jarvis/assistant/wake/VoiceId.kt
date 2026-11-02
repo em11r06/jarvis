@@ -217,7 +217,10 @@ object VoiceId {
         val v = hit.voice ?: return false.also { Log.d(TAG, "Reddedildi: ses izi yok") }
         val sim = score(settings, v, print)
         // Kulaklıkla ses farklı mikrofondan/uzaktan gelir; ses izi biraz daha az benzer çıkar.
-        val th = settings.voiceThreshold - if (com.jarvis.assistant.core.AudioRoute.headset(context)) HEADSET_SLACK else 0f
+        // Telefon müzik/video çalarken şarkıdaki sesler karışmasın diye daha sıkı.
+        val th = settings.voiceThreshold -
+            (if (com.jarvis.assistant.core.AudioRoute.headset(context)) HEADSET_SLACK else 0f) +
+            (if (music) MUSIC_STRICT else 0f)
         val ok = sim >= th
         Log.d(TAG, "Ses benzerliği $sim (eşik $th) -> ${if (ok) "kabul" else "ret"}")
         return ok
@@ -232,22 +235,65 @@ object VoiceId {
      */
     suspend fun commandIsUser(context: Context, settings: Settings, pcm: ByteArray): Boolean = withContext(Dispatchers.IO) {
         val print = loadPrint(settings) ?: return@withContext true
-        val (model, spk) = runCatching { VoskModels.load(context) }.getOrNull() ?: return@withContext true
-        if (spk == null) return@withContext true
-        val v = runCatching {
-            Recognizer(model, VoskModels.SAMPLE_RATE, spk).use { rec ->
-                rec.acceptWaveForm(pcm, pcm.size)
-                val o = JSONObject(rec.finalResult)
-                if (o.optInt("spk_frames", 0) < 30) null
-                else o.optJSONArray("spk")?.let { a -> FloatArray(a.length()) { a.getDouble(it).toFloat() } }
-            }
-        }.getOrNull() ?: return@withContext true
+        val (v, frames) = voiceVector(context, pcm) ?: return@withContext true
+        // Çok kısa cevaplar ("evet", "tamam") güvenilir ölçülemez: geçir.
+        if (frames < 30) return@withContext true
+        val headsetSlack = if (com.jarvis.assistant.core.AudioRoute.headset(context)) HEADSET_SLACK else 0f
+        // Cümle kaydı varsa asıl kontrol onunla: normal konuşma sesi kelime sesinden farklıdır.
+        val long = loadLong(settings)
+        if (long.isNotEmpty() && settings.voiceThresholdLong > 0f) {
+            val simLong = scoreAgainst(v, long)
+            val thLong = settings.voiceThresholdLong - headsetSlack - if (frames < 120) SHORT_SLACK else 0f
+            Log.d(TAG, "Komut sesi (cümle kaydı) benzerliği $simLong (eşik $thLong)")
+            return@withContext simLong >= thLong
+        }
         val sim = score(settings, v, print)
         // Komutlar uzun ve farklı kelimeler içerdiği için kelime eşiğinden biraz daha hoşgörülü.
         val th = settings.voiceThreshold - COMMAND_SLACK - if (com.jarvis.assistant.core.AudioRoute.headset(context)) HEADSET_SLACK else 0f
         Log.d(TAG, "Komut sesi benzerliği $sim (eşik $th)")
         sim >= th
     }
+
+    /**
+     * Kaydedilmiş sesin (PCM) ses izi ve konuşma uzunluğu (10 ms'lik çerçeve sayısı).
+     * Komut doğrulaması ve cümle kaydı aynı yoldan geçer ki karşılaştırma adil olsun.
+     */
+    suspend fun voiceVector(context: Context, pcm: ByteArray): Pair<FloatArray, Int>? = withContext(Dispatchers.IO) {
+        val (model, spk) = runCatching { VoskModels.load(context) }.getOrNull() ?: return@withContext null
+        if (spk == null) return@withContext null
+        runCatching {
+            Recognizer(model, VoskModels.SAMPLE_RATE, spk).use { rec ->
+                rec.acceptWaveForm(pcm, pcm.size)
+                val o = JSONObject(rec.finalResult)
+                val frames = o.optInt("spk_frames", 0)
+                o.optJSONArray("spk")?.let { a -> FloatArray(a.length()) { a.getDouble(it).toFloat() } to frames }
+            }
+        }.getOrNull()
+    }
+
+    private fun loadLong(settings: Settings): List<FloatArray> = settings.voiceSamplesLong.split(';').filter { it.isNotBlank() }.mapNotNull { r ->
+        runCatching { r.split(',').map { it.toFloat() }.toFloatArray() }.getOrNull()
+    }
+
+    /** Örneklerin ortalamasına ve en yakın iki örneğe göre benzerlik (hangisi yüksekse). */
+    private fun scoreAgainst(v: FloatArray, samples: List<FloatArray>): Float {
+        val dim = v.size
+        val mean = FloatArray(dim)
+        val same = samples.filter { it.size == dim }
+        if (same.isEmpty()) return 0f
+        same.forEach { s -> for (i in 0 until dim) mean[i] += s[i] / same.size }
+        val top = same.map { cosine(v, it) }.sortedDescending().take(2).average().toFloat()
+        return maxOf(cosine(v, mean), top)
+    }
+
+    /** Cümle kaydını saklar; eşiği her örneğin diğerlerine benzerliğinden hesaplar. */
+    fun saveLongEnrollment(settings: Settings, samples: List<FloatArray>) {
+        settings.voiceSamplesLong = samples.joinToString(";") { s -> s.joinToString(",") { "%.4f".format(java.util.Locale.US, it) } }
+        val loo = samples.indices.map { i -> scoreAgainst(samples[i], samples.filterIndexed { j, _ -> j != i }) }.sorted()
+        settings.voiceThresholdLong = (loo.first() - 0.08f).coerceIn(0.3f, 0.75f)
+    }
+
+    fun hasLongEnrollment(settings: Settings) = settings.voiceThresholdLong > 0f && settings.voiceSamplesLong.isNotBlank()
 
     /**
      * Önceki sürümlerin otomatik "öğrenme"si gürültüleri de ses kaydına eklemiş olabilir:
@@ -364,6 +410,10 @@ object VoiceId {
     private const val HEADSET_SLACK = 0.05f
     /** Komut sesi sadece açıkça başka birine aitse reddedilir (kayıt kısa "Jarvis" sözlerinden yapıldığı için). */
     private const val COMMAND_SLACK = 0.22f
+    /** Müzik/video çalarken uyandırma için ek sıkılık. */
+    private const val MUSIC_STRICT = 0.05f
+    /** Kısa komutlarda ses izi daha az kesin: biraz hoşgörü. */
+    private const val SHORT_SLACK = 0.06f
     private const val MAX_SAMPLES = 24
     /** Ses tanıtırken alınan örnek sayısı. */
     private const val ENROLL_KEEP = 8

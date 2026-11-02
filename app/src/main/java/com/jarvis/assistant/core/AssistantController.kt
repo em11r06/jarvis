@@ -139,7 +139,8 @@ class AssistantController(
         beforeListen?.invoke()
         busy.withLock {
             // Dinlerken müziği/videoyu kıs ki kullanıcıyı net duyalım.
-            speaker.acquireFocus()
+            // Dinlerken müziği/videoyu durdur: telefonun kendi sesi mikrofona karışmasın.
+            speaker.pauseMedia()
             inVoiceSession = true
             try {
                 var timeout = FIRST_LISTEN_MS
@@ -168,7 +169,7 @@ class AssistantController(
                 _partial.value = ""
                 _state.value = AssistantState.IDLE
                 listener.release()
-                speaker.releaseFocus()
+                speaker.resumeMedia()
                 afterSession?.invoke()
             }
         }
