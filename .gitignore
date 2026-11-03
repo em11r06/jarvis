@@ -11,3 +11,5 @@ captures/
 app/src/main/assets/model-en-us/
 ci-keystore/
 app/src/main/assets/model-spk/
+app/libs/
+app/src/main/assets/spk/

@@ -196,7 +196,7 @@ object VoiceId {
      *   Ses izi yoksa (çok kısa/gürültü) reddedilir. Reddedilen sesler asla öğrenilmez.
      * - Bir oturum bittikten hemen sonra (Jarvis'in kendi sesinin yankısı) uyanmaz.
      */
-    fun accept(context: Context, settings: Settings, hit: WakeHit): Boolean {
+    fun accept(context: Context, settings: Settings, hit: WakeHit, audio: ShortArray? = null): Boolean {
         if (System.currentTimeMillis() < quietUntil) {
             Log.d(TAG, "Reddedildi: oturum yeni bitti")
             return false
@@ -212,6 +212,15 @@ object VoiceId {
         if (hit.confidence < minConf) {
             Log.d(TAG, "Reddedildi: güven ${hit.confidence} < $minConf")
             return false
+        }
+        // Yeni konuşmacı tanıma (CAM++) kayıtlıysa asıl karar onunla verilir.
+        if (audio != null && SpeakerId.enrolled(settings)) {
+            val slack = (if (com.jarvis.assistant.core.AudioRoute.headset(context)) HEADSET_SLACK else 0f) - (if (music) MUSIC_STRICT else 0f)
+            val ok = SpeakerId.isUser(context, settings, audio, slack)
+            if (ok != null) {
+                Log.d(TAG, "Konuşmacı tanıma: ${if (ok) "kabul" else "ret"}")
+                return ok
+            }
         }
         if (print == null) return true
         val v = hit.voice ?: return false.also { Log.d(TAG, "Reddedildi: ses izi yok") }
@@ -234,6 +243,12 @@ object VoiceId {
      * Ses kaydı yoksa ya da kontrol edilemiyorsa true döner.
      */
     suspend fun commandIsUser(context: Context, settings: Settings, pcm: ByteArray): Boolean = withContext(Dispatchers.IO) {
+        if (SpeakerId.enrolled(settings)) {
+            val slack = if (com.jarvis.assistant.core.AudioRoute.headset(context)) HEADSET_SLACK else 0f
+            val pcm16 = ShortArray(pcm.size / 2) { ((pcm[it * 2].toInt() and 0xFF) or (pcm[it * 2 + 1].toInt() shl 8)).toShort() }
+            // Çok kısa cevaplar ("evet") ölçülemezse geçir.
+            return@withContext SpeakerId.isUser(context, settings, pcm16, slack) ?: true
+        }
         val print = loadPrint(settings) ?: return@withContext true
         val (v, frames) = voiceVector(context, pcm) ?: return@withContext true
         // Çok kısa cevaplar ("evet", "tamam") güvenilir ölçülemez: geçir.
@@ -438,6 +453,34 @@ class MicLoop(
 
     private var routedBt = false
 
+    /** Son 4 saniyelik ses (uyandırma kelimesinin kimin sesi olduğunu kontrol etmek için). */
+    private val ring = ShortArray(VoskModels.SAMPLE_RATE.toInt() * 4)
+    private var ringPos = 0
+    private var ringFilled = 0
+
+    /** Son tanıma sonucu geldiği anda alınan son ~2 saniyelik ses. */
+    @Volatile var lastResultAudio: ShortArray? = null
+        private set
+
+    private fun pushRing(buf: ShortArray, n: Int) {
+        for (i in 0 until n) {
+            ring[ringPos] = buf[i]
+            ringPos = (ringPos + 1) % ring.size
+        }
+        ringFilled = minOf(ring.size, ringFilled + n)
+    }
+
+    private fun snapshot(samples: Int): ShortArray {
+        val n = minOf(samples, ringFilled)
+        val out = ShortArray(n)
+        var p = (ringPos - n + ring.size) % ring.size
+        for (i in 0 until n) {
+            out[i] = ring[p]
+            p = (p + 1) % ring.size
+        }
+        return out
+    }
+
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
     @Volatile private var running = false
     private var thread: Thread? = null
@@ -488,10 +531,12 @@ class MicLoop(
                     var sum = 0.0
                     for (i in 0 until n) sum += buf[i].toDouble() * buf[i]
                     com.jarvis.assistant.core.Ambient.feed(kotlin.math.sqrt(sum / n))
+                    pushRing(buf, n)
                     // Aynı ses parçası her tanıyıcıya verilir (ör. İngilizce + Türkçe model).
                     for (rec in recognizers) {
                         if (rec.acceptWaveForm(buf, n)) {
                             val res = rec.result
+                            lastResultAudio = snapshot(VoskModels.SAMPLE_RATE.toInt() * 2)
                             main.post { if (running) onResult(res) }
                         }
                     }

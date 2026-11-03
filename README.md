@@ -157,10 +157,10 @@ bırakıp yer açar, **Sohbetleri sil** hepsini siler. Çıkan rehber Ayarlar'da
   ayarına ve mesafeye göre kendisi ayarlar. Dokunuştan sonra ekran değişmezse biraz daha uzun bir kez daha dokunur.
 
 ### Uyanma sesi ve ses tanıma
-**Sadece senin sesin:** "Sesimi tanıt" iki aşamalı: önce uyandırma kelimesini 8 kez söylersin, sonra 4 kısa cümle okursun.
-Uyandırma kelimesi sesinle, uyandıktan sonraki her cümle de normal konuşma sesinle karşılaştırılır; başkasının (TV, misafir)
-sesi yok sayılır. Sen konuşurken telefonda çalan müzik/video duraklatılır, bitince devam eder (Ayarlar'dan kapatılabilir);
-arka planda dinlerken yankı engelleme açıktır ve müzik çalarken ses kontrolü daha sıkıdır.
+**Sadece senin sesin:** Konuşanın sen olup olmadığına CAM++ adlı güncel bir konuşmacı tanıma modeli (sherpa-onnx, telefonda çalışır,
+internet gerekmez) karar verir. "Sesimi tanıt" iki aşamalı: uyandırma kelimesini 8 kez söylersin, sonra 4 kısa cümle okursun.
+Uyandırma kelimesinde ve sonraki her cümlede ses imzan karşılaştırılır; TV, başkaları ve telefonda çalan sesler yok sayılır.
+Sen konuşurken telefonda çalan müzik/video duraklatılır. Seçicilik ayarı küçük adımlarla değiştirilmeli.
 
 **Gelişmiş ses tanıma** (Ayarlar > Ses, varsayılan açık): söylediklerin kaydedilip Gemini'ye yazıya döktürülür;
 rehberindeki isimleri, uygulama adlarını ve konuşmanın bağlamını bildiği için çok daha doğru anlar. İnternet yoksa ya da

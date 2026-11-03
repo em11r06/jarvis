@@ -19,7 +19,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jarvis.assistant.JarvisApp
+import com.jarvis.assistant.wake.SpeakerId
 import com.jarvis.assistant.wake.VoiceId
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.jarvis.assistant.wake.VoskModels
 import com.jarvis.assistant.wake.WakeWordService
 import kotlinx.coroutines.delay
@@ -61,26 +64,33 @@ fun VoiceEnrollDialog(onDone: (Boolean) -> Unit) {
         }
         val word = VoskModels.wakeWords(settings).first().replaceFirstChar { it.titlecase(java.util.Locale("tr", "TR")) }
         val samples = mutableListOf<FloatArray>()
+        val spk = mutableListOf<FloatArray>()
         var misses = 0
+        var got = 0
+        val recorder = com.jarvis.assistant.speech.CloudListener(context, settings)
         try {
-            while (samples.size < SAMPLES && misses < 8) {
-                message = "\"$word\" deyin (${samples.size + 1}/$SAMPLES)\n" + TIPS[samples.size % TIPS.size]
-                val v = VoiceId.captureSample(context)
-                if (v != null) {
-                    samples += v
-                    count = samples.size
+            // 1. aşama: uyandırma kelimesi.
+            while (got < SAMPLES && misses < 8) {
+                message = "\"$word\" deyin (${got + 1}/$SAMPLES)\n" + TIPS[got % TIPS.size]
+                val pcm = recorder.recordSentence(6000)
+                val vosk = pcm?.let { VoiceId.voiceVector(context, it) }?.first
+                val emb = pcm?.let { withContext(Dispatchers.IO) { SpeakerId.embedBytes(context, it) } }
+                if (vosk != null || emb != null) {
+                    vosk?.let { samples += it }
+                    emb?.let { spk += it }
+                    got++
+                    count = got
                     message = "Aldım!"
-                    delay(500)
+                    delay(400)
                 } else {
                     misses++
                     message = "Duyamadım, tekrar deneyin."
                     delay(900)
                 }
             }
-            if (samples.size >= 4) {
-                VoiceId.saveEnrollment(settings, samples)
+            if (got >= 4) {
+                if (samples.size >= 3) VoiceId.saveEnrollment(settings, samples)
                 // 2. aşama: normal konuşma sesi. Uyandıktan sonraki cümlelerin size ait olup olmadığı bununla anlaşılır.
-                val recorder = com.jarvis.assistant.speech.CloudListener(context, settings)
                 val long = mutableListOf<FloatArray>()
                 var sentenceMisses = 0
                 var i = 0
@@ -89,9 +99,11 @@ fun VoiceEnrollDialog(onDone: (Boolean) -> Unit) {
                     message = "Şimdi bu cümleyi normal sesinizle okuyun (${i + 1}/${SENTENCES.size}):\n\n\"${SENTENCES[i]}\""
                     val pcm = recorder.recordSentence(10_000)
                     val vf = pcm?.let { VoiceId.voiceVector(context, it) }
-                    if (vf != null && vf.second >= 120) {
-                        long += vf.first
-                        count = SAMPLES + long.size
+                    val emb = pcm?.takeIf { it.size >= 16000 * 2 * 3 / 2 }?.let { withContext(Dispatchers.IO) { SpeakerId.embedBytes(context, it) } }
+                    if ((vf != null && vf.second >= 120) || emb != null) {
+                        if (vf != null && vf.second >= 120) long += vf.first
+                        emb?.let { spk += it }
+                        count = SAMPLES + i + 1
                         message = "Aldım!"
                         delay(500)
                         i++
@@ -101,11 +113,14 @@ fun VoiceEnrollDialog(onDone: (Boolean) -> Unit) {
                         delay(1200)
                     }
                 }
-                message = if (long.size >= 3) {
-                    VoiceId.saveLongEnrollment(settings, long)
-                    "Sesiniz kaydedildi. Artık hem uyandırırken hem konuşurken sadece size tepki vereceğim."
-                } else {
-                    "Uyandırma sesiniz kaydedildi ama cümleler alınamadı; konuşma kontrolü daha gevşek çalışacak. Sessiz bir yerde tekrar deneyebilirsiniz."
+                if (long.size >= 3) VoiceId.saveLongEnrollment(settings, long)
+                message = when {
+                    spk.size >= 6 -> {
+                        SpeakerId.saveEnrollment(settings, spk)
+                        "Sesiniz kaydedildi. Artık hem uyandırırken hem konuşurken sadece size tepki vereceğim."
+                    }
+                    long.size >= 3 -> "Sesiniz kaydedildi."
+                    else -> "Uyandırma sesiniz kaydedildi ama cümleler alınamadı. Sessiz bir yerde tekrar deneyin."
                 }
             } else {
                 message = "Yeterli kayıt alınamadı. Sessiz bir yerde tekrar deneyin."
@@ -135,7 +150,7 @@ fun VoiceEnrollDialog(onDone: (Boolean) -> Unit) {
             }
         },
         confirmButton = {
-            if (finished) TextButton(onClick = { onDone(settings.voicePrint.isNotBlank()) }) { Text("Tamam") }
+            if (finished) TextButton(onClick = { onDone(settings.voicePrint.isNotBlank() || SpeakerId.enrolled(settings)) }) { Text("Tamam") }
         },
     )
 }

@@ -90,6 +90,8 @@ class VoskEngine(
                 model = m
                 speaker = s
                 trModel = VoskModels.loadTurkish(context.applicationContext)
+                // Konuşmacı modelini önceden yükle (ilk uyanmada gecikme olmasın).
+                kotlinx.coroutines.withContext(Dispatchers.IO) { SpeakerId.available(context.applicationContext) }
                 onReady()
             } catch (e: Exception) {
                 onError("Ses modeli açılamadı: ${e.message}")
@@ -131,7 +133,7 @@ class VoskEngine(
 
     private fun onResult(json: String) {
         val hit = VoiceId.parse(json, phrases) ?: return
-        if (!VoiceId.accept(context, settings, hit)) return
+        if (!VoiceId.accept(context, settings, hit, loop?.lastResultAudio)) return
         val now = System.currentTimeMillis()
         if (now - lastWake < 1500) return
         lastWake = now

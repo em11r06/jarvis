@@ -71,6 +71,9 @@ class Settings(context: Context) {
     var voiceSamples by str("voice_samples", "")
     /** Normal konuşma (cümle) ses izi örnekleri: komutların kullanıcıya ait olup olmadığını anlamak için. */
     var voiceSamplesLong by str("voice_samples_long", "")
+    /** Konuşmacı tanıma (CAM++) ses imzaları ve eşiği; 0 ise kayıt yok. */
+    var spkSamples by str("spk_samples", "")
+    var spkThreshold by float("spk_threshold", 0f)
     /** Cümle ses izi eşiği (0: kayıt yok). */
     var voiceThresholdLong by float("voice_threshold_long", 0f)
     /** Dinlerken müzik/videoyu tamamen duraklat (kısmak yerine), bitince devam ettir. */

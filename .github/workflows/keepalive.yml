@@ -22,4 +22,9 @@ jobs:
         with:
           path: vosk-model
           key: vosk-models-en-us-0.15-spk-0.4
+      - name: Konuşmacı tanıma önbelleğini oku
+        uses: actions/cache/restore@v4
+        with:
+          path: sherpa
+          key: sherpa-onnx-2.0.1-campplus-zh-en-advanced
       - run: ls -la ci-keystore || echo "Anahtar önbellekte yok!"

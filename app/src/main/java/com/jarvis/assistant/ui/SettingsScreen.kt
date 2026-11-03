@@ -83,6 +83,7 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
     var wakeWords by remember { mutableStateOf(s.wakeWords) }
     var bargeIn by remember { mutableStateOf(s.bargeIn) }
     var micSens by remember { mutableStateOf(s.micSensitivity) }
+    var spkTh by remember { mutableFloatStateOf(s.spkThreshold) }
     var pauseMedia by remember { mutableStateOf(s.pauseMedia) }
     var cloudStt by remember { mutableStateOf(s.cloudStt) }
     var headsetMode by remember { mutableStateOf(s.headsetMicMode) }
@@ -171,9 +172,9 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
         "voice" -> if (s.ttsMode == Settings.TTS_ELEVEN) "ElevenLabs sesi" else "Telefonun sesi"
         "wake" -> (if (wakeRunning) "Dinliyor" else "Kapalı") + " · " + com.jarvis.assistant.wake.VoskModels.wakeWords(s).joinToString(", ")
         "voiceid" -> when {
-            !hasPrint -> "Kayıt yok"
-            com.jarvis.assistant.wake.VoiceId.hasLongEnrollment(s) -> "Kayıtlı ✓"
-            else -> "Cümle kaydı eksik"
+            com.jarvis.assistant.wake.SpeakerId.enrolled(s) -> "Kayıtlı ✓"
+            hasPrint -> "Yeniden kaydedin (yeni ses tanıma)"
+            else -> "Kayıt yok"
         }
         "style" -> if (styleGuide.isNotBlank()) "Öğrenildi ✓" else "Henüz yok"
         "phone" -> if (Permissions.notificationAccess(context)) "Bildirim erişimi açık" else "Bildirim erişimi kapalı"
@@ -413,27 +414,35 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
                 }
                 "voiceid" -> {
                 SectionTitle("Sesimi tanı")
+                val spkOn = com.jarvis.assistant.wake.SpeakerId.enrolled(s)
                 Text(
-                    if (hasPrint) "Sesiniz kayıtlı: Jarvis sadece size tepki verir (eşik ${"%.2f".format(threshold)}). Sizi zor tanıyorsa seçiciliği biraz düşürün ya da sessiz bir yerde yeniden kaydedin." +
-                        (if (!com.jarvis.assistant.wake.VoiceId.hasLongEnrollment(s)) "\n\nÖnemli: Konuşma sesiniz henüz kayıtlı değil. \"Yeniden kaydet\" ile birkaç cümle okuyun; böylece uyandıktan sonra sadece sizin sözlerinizi dinlerim." else "")
-                    else "Kayıt yok: \"Jarvis\" diyen herkese (ve bazen şarkılara) tepki verebilir. Uyandırma kelimesini 8 kez söyleyip 4 cümle okuyarak sesinizi tanıtın.",
+                    when {
+                        spkOn -> "Sesiniz kayıtlı ✓ Jarvis hem uyandırma kelimesinde hem de sonraki her cümlede konuşanın siz olup olmadığına bakar; " +
+                            "telefonda çalan sesler, TV ve başka insanlar yok sayılır."
+                        hasPrint -> "Eski ses kaydınız var ama yeni, çok daha doğru ses tanıma için bir kez \"Yeniden kaydet\" yapın " +
+                            "(uyandırma kelimesini 8 kez söyleyip 4 cümle okuyacaksınız, 1-2 dakika)."
+                        else -> "Kayıt yok: uyandırma kelimesini söyleyen herkese tepki verebilir. Sesinizi tanıtın: " +
+                            "uyandırma kelimesini 8 kez söyleyip 4 cümle okuyacaksınız (1-2 dakika, sessiz bir yerde)."
+                    },
                     fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
                     Button(onClick = {
                         if (Permissions.has(context, Manifest.permission.RECORD_AUDIO)) enrolling = true
                         else message = "Önce mikrofon izni verin (Kurulum sihirbazı)."
-                    }) { Text(if (hasPrint) "Yeniden kaydet" else "Sesimi tanıt") }
-                    if (hasPrint) OutlinedButton(onClick = { s.voicePrint = ""; s.voiceSamples = ""; s.voiceSamplesLong = ""; s.voiceThresholdLong = 0f; hasPrint = false }) { Text("Sil") }
+                    }) { Text(if (hasPrint || spkOn) "Yeniden kaydet" else "Sesimi tanıt") }
+                    if (hasPrint || spkOn) OutlinedButton(onClick = { s.voicePrint = ""; s.voiceSamples = ""; s.voiceSamplesLong = ""; s.voiceThresholdLong = 0f; com.jarvis.assistant.wake.SpeakerId.clear(s); hasPrint = false }) { Text("Sil") }
                 }
-                if (hasPrint) {
-                    Text("Seçicilik: sizi tanımazsa düşürün, başkalarına tepki verirse artırın.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+                if (spkOn) {
+                    Text(
+                        "Seçicilik: ${"%.2f".format(spkTh)}. Sizi tanımazsa sola, başkalarına tepki verirse sağa kaydırın (küçük adımlarla).",
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp),
+                    )
                     Slider(
-                        value = threshold, onValueChange = { threshold = it }, valueRange = 0.2f..0.9f,
-                        onValueChangeFinished = { s.voiceThreshold = threshold },
+                        value = spkTh, onValueChange = { spkTh = it }, valueRange = 0.2f..0.8f,
+                        onValueChangeFinished = { s.spkThreshold = spkTh },
                     )
                 }
-
                 }
                 "phone" -> {
                 SectionTitle("Mesajlar")
@@ -634,8 +643,9 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
     if (enrolling) {
         VoiceEnrollDialog(onDone = { ok ->
             enrolling = false
-            hasPrint = ok
+            hasPrint = ok || com.jarvis.assistant.wake.SpeakerId.enrolled(s)
             threshold = s.voiceThreshold
+            spkTh = s.spkThreshold
         })
     }
 

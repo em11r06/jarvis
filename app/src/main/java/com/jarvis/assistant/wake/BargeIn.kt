@@ -12,7 +12,7 @@ import org.vosk.Recognizer
  * Kullanıcı (kayıtlıysa sadece kendi sesiyle) kelimeyi söylerse onBarge çağrılır ve konuşma kesilir.
  * Yankı engelleme Jarvis'in kendi sesini mikrofondan çıkarır.
  */
-class BargeIn private constructor(private val loop: MicLoop, private val recs: List<Recognizer>) {
+class BargeIn private constructor(val loop: MicLoop, private val recs: List<Recognizer>) {
     @Volatile var triggered = false
         private set
 
@@ -39,7 +39,7 @@ class BargeIn private constructor(private val loop: MicLoop, private val recs: L
                 onResult = { json ->
                     val hit = VoiceId.parse(json, words)
                     val b = self
-                    if (hit != null && b != null && !b.triggered && VoiceId.accept(context, settings, hit)) {
+                    if (hit != null && b != null && !b.triggered && VoiceId.accept(context, settings, hit, b.loop.lastResultAudio)) {
                         b.triggered = true
                         onBarge()
                     }

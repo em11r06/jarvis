@@ -59,6 +59,25 @@ jobs:
           echo "jarvis sözlükte geçiyor mu:"; grep -rac "jarvis" app/src/main/assets/model-en-us || true
           du -sh app/src/main/assets/model-en-us
 
+      # Konuşmacı tanıma (sadece kullanıcının sesine tepki): sherpa-onnx kütüphanesi ve CAM++ modeli.
+      - name: Konuşmacı tanıma önbelleği
+        uses: actions/cache@v4
+        with:
+          path: sherpa
+          key: sherpa-onnx-2.0.1-campplus-zh-en-advanced
+
+      - name: Konuşmacı tanıma kütüphanesi ve modeli
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p sherpa
+          [ -f sherpa/sherpa-onnx.aar ] || gh release download v2.0.1 -R k2-fsa/sherpa-onnx -p "sherpa-onnx-2.0.1.aar" -O sherpa/sherpa-onnx.aar
+          [ -f sherpa/campplus.onnx ] || gh release download speaker-recongition-models -R k2-fsa/sherpa-onnx -p "3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx" -O sherpa/campplus.onnx
+          mkdir -p app/libs app/src/main/assets/spk
+          cp sherpa/sherpa-onnx.aar app/libs/sherpa-onnx.aar
+          cp sherpa/campplus.onnx app/src/main/assets/spk/campplus.onnx
+          ls -la app/libs app/src/main/assets/spk
+
       # Secret yoksa geçici çözüm: depoya girmeyen, sadece Actions önbelleğinde duran sabit bir
       # anahtar. Böylece imza her derlemede aynı kalır. (Kalıcı çözüm: README'deki secret'lar.)
       - name: Geçici imza anahtarını önbellekten al
