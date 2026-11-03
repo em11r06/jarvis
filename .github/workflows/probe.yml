@@ -31,7 +31,7 @@ jobs:
         run: |
           pip install -q sherpa-onnx soundfile numpy
           gh release download speaker-recongition-models -R k2-fsa/sherpa-onnx -p "3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx" -D m
-          gh release download speaker-recongition-models -R k2-fsa/sherpa-onnx -p "3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx" -D m || true
+          gh release download speaker-recongition-models -R k2-fsa/sherpa-onnx -p "wespeaker_en_voxceleb_resnet34.onnx" -D m || true
           ls -la m
           curl -fsSL -o t.tar.bz2 https://github.com/csukuangfj/sr-data/archive/refs/heads/main.tar.gz || true
           git clone -q --depth 1 https://github.com/csukuangfj/sr-data || true
@@ -50,8 +50,10 @@ jobs:
               same=[];diff=[]
               for i,a in enumerate(files):
                   for b in files[i+1:]:
-                      sa=a.split('/')[-2]; sb=b.split('/')[-2]
+                      lab=lambda f: f.split('/')[-1].replace('-','_').split('_')[0]
+                      sa=lab(a); sb=lab(b)
                       c=float(E[a]@E[b]); (same if sa==sb else diff).append(c)
-              print(model, "dim", ex.dim, "same", np.round(np.percentile(same,[5,50,95]),3) if same else None, "diff", np.round(np.percentile(diff,[5,50,95]),3) if diff else None)
+              print("pairs same", len(same), "diff", len(diff))
+              print(model, "dim", ex.dim, "same", np.round(np.percentile(same,[0,5,50]),3) if same else None, "diff", np.round(np.percentile(diff,[50,95,100]),3) if diff else None)
           PY
           python3 t.py
