@@ -44,6 +44,16 @@ class MainActivity : ComponentActivity() {
         // Uyandırma açıksa ve servis çalışmıyorsa (ör. yeniden başlatmadan sonra) şimdi başlat.
         if (app.settings.wakeEnabled && !WakeWordService.isRunning.value) WakeWordService.start(this)
 
+        // Arabanın Bluetooth'unu kulaklıktan ayırt edebilmek için "Yakındaki cihazlar" izni (bir kez sorulur).
+        val prefs = getSharedPreferences("jarvis_ui", MODE_PRIVATE)
+        if (!prefs.getBoolean("asked_bt", false) &&
+            checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
+        ) {
+            prefs.edit().putBoolean("asked_bt", true).apply()
+            android.widget.Toast.makeText(this, "Arabada doğru çalışabilmem için Bluetooth cihazlarını tanımam gerekiyor.", android.widget.Toast.LENGTH_LONG).show()
+            requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 7)
+        }
+
         // GitHub'da yeni sürüm var mı? Varsa arka planda indirir.
         Updater.checkInBackground(this)
 

@@ -19,15 +19,48 @@ object AudioRoute {
         return listOf("watch", "saat", "band", "fit").any { n.contains(it) }
     }
 
-    /** Ses kulaklığa mı gidiyor (kablolu ya da Bluetooth)? */
+    /** Araba ses sistemlerinin adlarında sık geçenler (cihaz sınıfı okunamazsa yedek). */
+    private val CAR_NAMES = listOf(
+        "car", "auto", "araba", "multimedia", "media nav", "medianav", "uconnect", "sync", "mzd", "carplay", "hands-free", "handsfree",
+        "toyota", "renault", "fiat", "volkswagen", "vw ", "ford", "hyundai", "kia", "bmw", "mercedes", "audi", "skoda", "seat",
+        "peugeot", "citroen", "opel", "honda", "nissan", "volvo", "dacia", "tesla", "togg", "chery", "mg ", "byd", "suzuki", "mazda", "jeep",
+    )
+
+    /**
+     * Bu Bluetooth cihazı bir araba mı? Araba sistemlerinde mikrofonu açmak arabayı "telefon görüşmesi"
+     * moduna sokar; bu yüzden arabada kulaklık mikrofonu hiç kullanılmaz, telefonun mikrofonu yeter.
+     */
+    private fun isCar(ctx: Context, d: AudioDeviceInfo): Boolean {
+        // Android Auto bağlıysa kesin araba.
+        val ui = ctx.getSystemService(android.app.UiModeManager::class.java)
+        if (ui?.currentModeType == android.content.res.Configuration.UI_MODE_TYPE_CAR) return true
+        // İzin verilmişse cihaz sınıfına bak (araba ses sistemi / eller serbest).
+        val byClass = runCatching {
+            if (ctx.checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != android.content.pm.PackageManager.PERMISSION_GRANTED) return@runCatching null
+            val bt = ctx.getSystemService(android.bluetooth.BluetoothManager::class.java)?.adapter ?: return@runCatching null
+            val cls = bt.getRemoteDevice(d.address).bluetoothClass ?: return@runCatching null
+            cls.deviceClass == android.bluetooth.BluetoothClass.Device.AUDIO_VIDEO_CAR_AUDIO ||
+                cls.deviceClass == android.bluetooth.BluetoothClass.Device.AUDIO_VIDEO_HANDSFREE
+        }.getOrNull()
+        if (byClass != null) return byClass
+        val n = " " + d.productName?.toString()?.lowercase().orEmpty() + " "
+        return CAR_NAMES.any { n.contains(it) }
+    }
+
+    /** Arabaya bağlı mı (Android Auto ya da araba Bluetooth'u)? */
+    fun inCar(ctx: Context): Boolean =
+        ctx.getSystemService(AudioManager::class.java).getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            .any { (it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP || it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO || it.type == AudioDeviceInfo.TYPE_BLE_SPEAKER) && isCar(ctx, it) }
+
+    /** Ses kulaklığa mı gidiyor (kablolu ya da Bluetooth)? Araba hoparlörü kulaklık sayılmaz. */
     fun headset(ctx: Context): Boolean =
         ctx.getSystemService(AudioManager::class.java).getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-            .any { it.type in HEADSET_TYPES && !isWatch(it) }
+            .any { it.type in HEADSET_TYPES && !isWatch(it) && !isCar(ctx, it) }
 
     /** Bluetooth kulaklığın mikrofonu (telefon görüşmesi modunda kullanılabilir), yoksa null. */
     fun bluetoothMic(ctx: Context): AudioDeviceInfo? =
         ctx.getSystemService(AudioManager::class.java).availableCommunicationDevices
-            .firstOrNull { (it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO || it.type == AudioDeviceInfo.TYPE_BLE_HEADSET) && !isWatch(it) }
+            .firstOrNull { (it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO || it.type == AudioDeviceInfo.TYPE_BLE_HEADSET) && !isWatch(it) && !isCar(ctx, it) }
 
     /**
      * Kulaklığın mikrofonu kullanılacak mı?

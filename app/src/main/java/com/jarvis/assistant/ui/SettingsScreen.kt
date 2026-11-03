@@ -397,7 +397,8 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
                 Text("Bluetooth kulaklığın mikrofonu", color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 10.dp))
                 Text(
                     "Otomatik: kulaklık (saat değil) bağlanınca komutlarınızı kulaklıktan dinler; uyandırma kelimesini müzik çalmıyorsa kulaklıktan, " +
-                        "çalıyorsa (müzik kalitesi bozulmasın diye) telefondan dinler. Hep açık: her zaman kulaklıktan (müzik kalitesi düşer).",
+                        "çalıyorsa (müzik kalitesi bozulmasın diye) telefondan dinler. Hep açık: her zaman kulaklıktan (müzik kalitesi düşer). " +
+                    "Arabada araç sistemi telefon görüşmesine geçmesin diye her zaman telefonun mikrofonu kullanılır.",
                     fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
