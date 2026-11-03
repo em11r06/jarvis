@@ -37,23 +37,23 @@ jobs:
           git clone -q --depth 1 https://github.com/csukuangfj/sr-data || true
           find sr-data -name "*.wav" | head -20
           cat > t.py <<'PY'
-          import sys, glob, numpy as np, soundfile as sf, sherpa_onnx
-          for model in glob.glob("m/*.onnx"):
+          import glob, numpy as np, soundfile as sf, sherpa_onnx
+          files = sorted(glob.glob("sr-data/test/3d-speaker/*.wav") + glob.glob("sr-data/enroll/*.wav") + glob.glob("sr-data/test/*-test-sr-*.wav"))
+          for f in files:
+              a, sr = sf.read(f, dtype="float32"); print(f, sr, a.shape, round(len(a)/sr,2))
+          lab = lambda f: f.split('/')[-1].replace('-','_').split('_')[0]
+          for model in sorted(glob.glob("m/*.onnx")):
               ex = sherpa_onnx.SpeakerEmbeddingExtractor(sherpa_onnx.SpeakerEmbeddingExtractorConfig(model=model, num_threads=2))
-              def emb(f):
+              E = {}
+              for f in files:
                   a, sr = sf.read(f, dtype="float32")
                   if a.ndim > 1: a = a[:,0]
                   s = ex.create_stream(); s.accept_waveform(sr, a); s.input_finished()
-                  e = np.array(ex.compute(s)); return e/np.linalg.norm(e)
-              files = sorted(glob.glob("sr-data/**/*.wav", recursive=True))[:24]
-              E = {f: emb(f) for f in files}
+                  e = np.array(ex.compute(s)); E[f] = e/np.linalg.norm(e)
               same=[];diff=[]
-              for i,a in enumerate(files):
-                  for b in files[i+1:]:
-                      lab=lambda f: f.split('/')[-1].replace('-','_').split('_')[0]
-                      sa=lab(a); sb=lab(b)
-                      c=float(E[a]@E[b]); (same if sa==sb else diff).append(c)
-              print("pairs same", len(same), "diff", len(diff))
-              print(model, "dim", ex.dim, "same", np.round(np.percentile(same,[0,5,50]),3) if same else None, "diff", np.round(np.percentile(diff,[50,95,100]),3) if diff else None)
+              for i,x in enumerate(files):
+                  for y in files[i+1:]:
+                      c=float(E[x]@E[y]); (same if lab(x)==lab(y) else diff).append(c)
+              print(model, "same min/med", round(min(same),3), round(float(np.median(same)),3), "diff med/max", round(float(np.median(diff)),3), round(max(diff),3))
           PY
           python3 t.py
