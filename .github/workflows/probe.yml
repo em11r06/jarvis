@@ -6,79 +6,12 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Sürümler ve AAR
-        env:
+      - env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release list -R k2-fsa/sherpa-onnx -L 5
-          TAG=$(gh release list -R k2-fsa/sherpa-onnx -L 20 --json tagName,isPrerelease -q '[.[]|select(.tagName|startswith("v"))][0].tagName')
-          echo "TAG=$TAG"
-          gh release view "$TAG" -R k2-fsa/sherpa-onnx --json assets -q '.assets[].name' | grep -iE "aar|android" | head -20
-          gh release download "$TAG" -R k2-fsa/sherpa-onnx -p "*.aar" -D aar || true
-          ls -la aar
-          A=$(ls aar/*.aar | head -1)
-          mkdir x && cd x && unzip -q "../$A" && ls -R | head -40 && unzip -l classes.jar | grep -i speaker | head -20
-          javap -cp classes.jar com.k2fsa.sherpa.onnx.SpeakerEmbeddingExtractor com.k2fsa.sherpa.onnx.SpeakerEmbeddingExtractorConfig com.k2fsa.sherpa.onnx.OnlineStream || true
-          du -sh jni/* || true
-      - name: Konuşmacı modelleri
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release view speaker-recongition-models -R k2-fsa/sherpa-onnx --json assets -q '.assets[] | "\(.name) \(.size)"' | grep -iE "campplus|eres2net|titanet|resnet34" | head -30
-      - name: Python ile ayırt etme testi
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          pip install -q sherpa-onnx soundfile numpy
-          gh release download speaker-recongition-models -R k2-fsa/sherpa-onnx -p "3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx" -D m
-          gh release download speaker-recongition-models -R k2-fsa/sherpa-onnx -p "wespeaker_en_voxceleb_resnet34.onnx" -D m || true
-          gh release download speaker-recongition-models -R k2-fsa/sherpa-onnx -p "3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx" -D m || true
-          gh release download speaker-recongition-models -R k2-fsa/sherpa-onnx -p "3dspeaker_speech_eres2netv2_sv_zh-cn_16k-common.onnx" -D m || true
-          gh release download speaker-recongition-models -R k2-fsa/sherpa-onnx -p "nemo_en_titanet_small.onnx" -D m || true
-          pip install -q vosk
-          curl -fsSL -o spk.zip https://alphacephei.com/vosk/models/vosk-model-spk-0.4.zip && unzip -q spk.zip
-          curl -fsSL -o en.zip https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip && unzip -q en.zip
-          ls -la m
-          curl -fsSL -o t.tar.bz2 https://github.com/csukuangfj/sr-data/archive/refs/heads/main.tar.gz || true
-          git clone -q --depth 1 https://github.com/csukuangfj/sr-data || true
-          find sr-data -name "*.wav" | head -20
-          cat > t.py <<'PY'
-          import glob, numpy as np, soundfile as sf, sherpa_onnx
-          files = sorted(glob.glob("sr-data/test/3d-speaker/*.wav") + glob.glob("sr-data/enroll/*.wav") + glob.glob("sr-data/test/*-test-sr-*.wav"))
-          for f in files:
-              a, sr = sf.read(f, dtype="float32"); print(f, sr, a.shape, round(len(a)/sr,2))
-          def acc(same, diff):
-              best=0
-              for t in np.linspace(-0.2,1,121):
-                  a=(sum(x>=t for x in same)/len(same)+sum(x<t for x in diff)/len(diff))/2; best=max(best,a)
-              return round(best,3)
-          lab = lambda f: f.split('/')[-1].replace('-','_').split('_')[0]
-          for model in sorted(glob.glob("m/*.onnx")):
-              ex = sherpa_onnx.SpeakerEmbeddingExtractor(sherpa_onnx.SpeakerEmbeddingExtractorConfig(model=model, num_threads=2))
-              E = {}
-              for f in files:
-                  a, sr = sf.read(f, dtype="float32")
-                  if a.ndim > 1: a = a[:,0]
-                  s = ex.create_stream(); s.accept_waveform(sr, a); s.input_finished()
-                  e = np.array(ex.compute(s)); E[f] = e/np.linalg.norm(e)
-              same=[];diff=[]
-              for i,x in enumerate(files):
-                  for y in files[i+1:]:
-                      c=float(E[x]@E[y]); (same if lab(x)==lab(y) else diff).append(c)
-              print(model, "same min/med", round(min(same),3), round(float(np.median(same)),3), "diff med/max", round(float(np.median(diff)),3), round(max(diff),3), "eer-acc", acc(same, diff))
-          from vosk import Model, KaldiRecognizer, SpkModel, SetLogLevel
-          SetLogLevel(-1)
-          vm = Model("vosk-model-small-en-us-0.15"); sm = SpkModel("vosk-model-spk-0.4")
-          import json
-          E={}
-          for f in files:
-              a, sr = sf.read(f, dtype="int16")
-              r = KaldiRecognizer(vm, 16000); r.SetSpkModel(sm); r.AcceptWaveform(a.tobytes())
-              v = np.array(json.loads(r.FinalResult()).get("spk", [0]*128), dtype=float); E[f]=v/ (np.linalg.norm(v)+1e-9)
-          same=[];diff=[]
-          for i,x in enumerate(files):
-              for y in files[i+1:]:
-                  c=float(E[x]@E[y]); (same if lab(x)==lab(y) else diff).append(c)
-          print("VOSK spk same min/med", round(min(same),3), round(float(np.median(same)),3), "diff med/max", round(float(np.median(diff)),3), round(max(diff),3), "eer-acc", acc(same, diff))
-          PY
-          python3 t.py
+          TAG=$(gh release list -R k2-fsa/sherpa-onnx -L 30 --json tagName -q '[.[]|select(.tagName|test("^v[0-9]"))][0].tagName')
+          gh release view "$TAG" -R k2-fsa/sherpa-onnx --json assets -q '.assets[].name' | grep -E "\.aar$" > aars.txt
+          gh release download "$TAG" -R k2-fsa/sherpa-onnx -p "$(head -1 aars.txt)" -D a
+          unzip -l a/*.aar | grep -E "\.so$"
+          unzip -o -q a/*.aar classes.jar -d c && unzip -l c/classes.jar | grep -c class
+          echo "SONUC TAG=$TAG"; cat aars.txt
