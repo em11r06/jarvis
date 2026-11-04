@@ -42,7 +42,8 @@ object AudioRoute {
             cls.deviceClass == android.bluetooth.BluetoothClass.Device.AUDIO_VIDEO_CAR_AUDIO ||
                 cls.deviceClass == android.bluetooth.BluetoothClass.Device.AUDIO_VIDEO_HANDSFREE
         }.getOrNull()
-        if (byClass != null) return byClass
+        // Cihaz türü "araba" diyorsa kesin; demiyorsa (bazı araba sistemleri kendini başka türde tanıtır) ada da bak.
+        if (byClass == true) return true
         val n = " " + d.productName?.toString()?.lowercase().orEmpty() + " "
         // Kullanıcının Ayarlar'a yazdığı araba adları da sayılır.
         val custom = com.jarvis.assistant.JarvisApp.instance.settings.carNames.split(',', '\n')
