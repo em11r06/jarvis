@@ -179,13 +179,15 @@ class CloudListener(private val context: Context, private val settings: Settings
             append("Bu ses kaydında bir kişi telefonundaki Türkçe sesli asistanla (adı Jarvis) konuşuyor. ")
             append("Bu bir komut da olabilir, arkadaşıyla konuşur gibi uzun, rahat bir sohbet de: espri, argo, yarım cümle, ")
             append("\"ya\", \"işte\", \"hani\" gibi dolgu sözleri, devrik cümleler, araya giren İngilizce kelimeler olabilir. ")
-            append("Söyleneni kelimesi kelimesine, doğru Türkçe yazımla yazıya dök; anlamı değiştirme, toparlama, kısaltma. ")
+            append("Görevin bir STENOGRAFÇI gibi söyleneni KELİMESİ KELİMESİNE, duyduğun sırayla yazmak. ")
+            append("Hiçbir kelimeyi değiştirme, düzeltme, eşanlamlısıyla değiştirme, ekleme ya da çıkarma; cümleyi toparlama, ")
+            append("daha mantıklı hale getirme, özetleme. Kişi garip ya da hatalı bir şey söylediyse onu aynen yaz. ")
+            append("Sadece Türkçe yazım kurallarına göre doğru harflerle yaz (ı, ş, ğ, ç, ö, ü). ")
             append("Sadece söylenen metni yaz; açıklama, tırnak, etiket ekleme, cevap verme. ")
-            append("Belirsiz bir kelime olursa konuşmanın bağlamına ve kişinin konuşma tarzına en uygun olanı seç. ")
+            append("Bir kelimeyi net duyamadıysan sesine en yakın kelimeyi yaz; anlam tahmin ederek başka kelime koyma. ")
             append("ÇOK ÖNEMLİ: Sadece kayıtta gerçekten duyulan sözleri yaz. Kayıtta konuşma yoksa ya da sadece gürültü, müzik, ")
             append("TV sesi veya anlaşılmayan mırıltı varsa sadece - yaz. Aşağıdaki bağlamdan ya da tahminle hiçbir cümle uydurma.")
-            if (style.isNotBlank()) append("\nKişinin konuşma tarzı (sık kullandığı kelimeler ve hitaplar): ").append(style.take(1200))
-            if (context_.isNotBlank()) append("\nJarvis'in kişiye son söylediği (sadece belirsiz kelimelerin yazımı için ipucu, kayıtta yoksa kullanma): ").append(context_.take(400))
+            if (context_.isNotBlank()) append("\nJarvis'in kişiye son söylediği (yalnızca özel isimlerin yazımı için; içeriğini asla yazma): ").append(context_.take(300))
             if (hints.isNotEmpty()) {
                 append("\nKişinin rehberindeki isimler ve telefonundaki uygulamalar (bunlardan biri söylenmişse aynen bu yazımla yaz): ")
                 append(hints.take(250).joinToString(", "))
@@ -205,10 +207,20 @@ class CloudListener(private val context: Context, private val settings: Settings
         var lastError = "model yok"
         for (m in MODELS) {
             if (!GeminiQuota.isAvailable(m)) continue
-            val res = Http.postJson(
+            // Yazıya dökmek için düşünmeye gerek yok: en düşük düşünme ayarı (hız). Model kabul etmezse ayarsız dene.
+            val thinking = if (m.contains("2.5")) JSONObject().put("thinkingBudget", 0) else JSONObject().put("thinkingLevel", "minimal")
+            body.getJSONObject("generationConfig").put("thinkingConfig", thinking)
+            var res = Http.postJson(
                 "https://generativelanguage.googleapis.com/v1beta/models/$m:generateContent",
                 body.toString(), mapOf("x-goog-api-key" to key),
             )
+            if (res.code == 400 && res.body.contains("thinking", ignoreCase = true)) {
+                body.getJSONObject("generationConfig").remove("thinkingConfig")
+                res = Http.postJson(
+                    "https://generativelanguage.googleapis.com/v1beta/models/$m:generateContent",
+                    body.toString(), mapOf("x-goog-api-key" to key),
+                )
+            }
             when {
                 res.code == 429 -> { GeminiQuota.markExhausted(m, res.body); lastError = "kota"; continue }
                 res.code == 402 -> { GeminiQuota.markBilling(); throw IllegalStateException("Gemini bakiyesi bitti") }
@@ -260,6 +272,7 @@ class CloudListener(private val context: Context, private val settings: Settings
         private const val END_SILENCE_MS = 1600
         private const val MAX_SECONDS = 60
         /** Hızlı ve ucuz modeller; ses anlama hepsinde var. */
-        private val MODELS = listOf("gemini-flash-lite-latest", "gemini-2.5-flash-lite", "gemini-flash-latest", "gemini-2.5-flash")
+        /** Ses tanımada doğruluk önemli: önce tam Flash modelleri, kota dolarsa hafif (Lite) modeller. */
+        private val MODELS = listOf("gemini-flash-latest", "gemini-2.5-flash", "gemini-flash-lite-latest", "gemini-2.5-flash-lite")
     }
 }

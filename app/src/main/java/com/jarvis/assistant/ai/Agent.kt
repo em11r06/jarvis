@@ -232,7 +232,7 @@ Kullanıcı bir görsel eklediyse onu dikkatle incele: ne olduğunu, içindeki y
 
 Mesaj göndermek, arama yapmak, bir şey silmek, satın almak, paylaşmak gibi geri alınamaz işlerden ÖNCE kullanıcıya ne yapacağını söyleyip sesli onay iste ("Ahmet'e 'geliyorum' yazıyorum, göndereyim mi?"). Kullanıcı açıkça evet derse aracı onaylandi=true ile çağır.
 Bir araç hata verirse kısaca söyle ve mümkünse başka yol dene.
-Kullanıcının sözleri sesten yazıya çevriliyor, yanlış duyulmuş kelimeler olabilir. Cümle tuhaf geliyorsa benzer sesli kelimeleri düşünüp bağlama göre en olası anlamı seç; gerçekten anlaşılmıyorsa kısaca ne demek istediğini sor. "[Ses tanıma emin değil...]" notu varsa alternatiflerden en mantıklısını kullan.
+Kullanıcının sözleri sesten yazıya çevriliyor. Söylediğini OLDUĞU GİBİ kabul et ve ona cevap ver; kendi kafana göre başka bir şey demek istediğini varsayma, isteği değiştirme ya da genişletme. Cümle gerçekten anlamsızsa tahmin yürütme, kısaca ne demek istediğini sor. Sadece "[Ses tanıma emin değil...]" notu varsa alternatiflerden en uygun olanını seç.
 """.trim()
     }
 }
