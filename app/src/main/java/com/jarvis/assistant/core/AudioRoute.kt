@@ -21,7 +21,7 @@ object AudioRoute {
 
     /** Araba ses sistemlerinin adlarında sık geçenler (cihaz sınıfı okunamazsa yedek). */
     private val CAR_NAMES = listOf(
-        "car", "auto", "araba", "multimedia", "media nav", "medianav", "uconnect", "sync", "mzd", "carplay", "hands-free", "handsfree",
+        "car", "carkit", "auto", "araba", "ozkurt cros", "cross", "corolla", "touch 2", "toyota touch", "multimedia", "media nav", "medianav", "uconnect", "sync", "mzd", "carplay", "hands-free", "handsfree",
         "toyota", "renault", "fiat", "volkswagen", "vw ", "ford", "hyundai", "kia", "bmw", "mercedes", "audi", "skoda", "seat",
         "peugeot", "citroen", "opel", "honda", "nissan", "volvo", "dacia", "tesla", "togg", "chery", "mg ", "byd", "suzuki", "mazda", "jeep",
     )
@@ -44,7 +44,10 @@ object AudioRoute {
         }.getOrNull()
         if (byClass != null) return byClass
         val n = " " + d.productName?.toString()?.lowercase().orEmpty() + " "
-        return CAR_NAMES.any { n.contains(it) }
+        // Kullanıcının Ayarlar'a yazdığı araba adları da sayılır.
+        val custom = com.jarvis.assistant.JarvisApp.instance.settings.carNames.split(',', '\n')
+            .map { it.trim().lowercase() }.filter { it.length >= 3 }
+        return (CAR_NAMES + custom).any { n.contains(it) }
     }
 
     /** Arabaya bağlı mı (Android Auto ya da araba Bluetooth'u)? */

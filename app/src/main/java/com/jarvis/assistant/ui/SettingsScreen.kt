@@ -87,6 +87,7 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
     var pauseMedia by remember { mutableStateOf(s.pauseMedia) }
     var cloudStt by remember { mutableStateOf(s.cloudStt) }
     var headsetMode by remember { mutableStateOf(s.headsetMicMode) }
+    var carNames by remember { mutableStateOf(s.carNames) }
     var wordsChanged by remember { mutableStateOf(false) }
     var testingWake by remember { mutableStateOf(false) }
     var hasTr by remember { mutableStateOf(com.jarvis.assistant.wake.VoskModels.hasTurkish(context)) }
@@ -411,6 +412,11 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
                         }, { Text(label) })
                     }
                 }
+                OutlinedTextField(
+                    carNames, { carNames = it; s.carNames = it },
+                    label = { Text("Araba Bluetooth adları (virgülle)") },
+                    singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                )
                 }
                 "voiceid" -> {
                 SectionTitle("Sesimi tanı")

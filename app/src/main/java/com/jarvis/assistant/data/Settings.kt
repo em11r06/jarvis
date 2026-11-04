@@ -57,6 +57,8 @@ class Settings(context: Context) {
     var micSensitivity by int("mic_sensitivity_v2", SENS_AUTO)
     /** Bluetooth kulaklığın mikrofonu: HEADSET_OFF, HEADSET_AUTO (varsayılan), HEADSET_ALWAYS. */
     var headsetMicMode by int("headset_mic_mode", HEADSET_AUTO)
+    /** Arabaların Bluetooth adları (virgülle); bunlarda Bluetooth mikrofonu hiç açılmaz. */
+    var carNames by str("car_names", "CARKIT, OZKURT CROS, Toyota Touch")
     /** Uyanınca ne yapsın: WAKE_SPEAK (söz), WAKE_BEEP, WAKE_FILE (seçilen ses dosyası), WAKE_SILENT. */
     var wakeSound: String
         get() = prefs.getString("wake_sound", null) ?: if (wakeGreeting) WAKE_SPEAK else WAKE_BEEP
