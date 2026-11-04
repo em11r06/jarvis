@@ -502,9 +502,15 @@ class MicLoop(
             // Bluetooth kulaklığın mikrofonunu aç (kulaklık "görüşme" moduna geçer).
             routedBt = runCatching { ctx.getSystemService(AudioManager::class.java).setCommunicationDevice(dev) }.getOrDefault(false)
         }
+        // VOICE_COMMUNICATION telefonun yankı engelleme ve gürültü azaltmasını açar; ama Bluetooth eller serbest
+        // cihazı (araba, kulaklık) bağlıyken Samsung bu kaynakla onu "telefon görüşmesi" moduna sokuyor.
+        // Bu yüzden Bluetooth cihazı varken (bilerek kulaklık mikrofonu kullanılmıyorsa) normal tanıma kaynağı kullanılır.
+        val anyCtx = ctx ?: com.jarvis.assistant.JarvisApp.instance
+        val source = if (routedBt || !com.jarvis.assistant.core.AudioRoute.hasBluetoothComm(anyCtx))
+            android.media.MediaRecorder.AudioSource.VOICE_COMMUNICATION
+        else android.media.MediaRecorder.AudioSource.VOICE_RECOGNITION
         val r = android.media.AudioRecord(
-            // VOICE_COMMUNICATION: telefonun yankı engelleme ve gürültü azaltma işlemini açar.
-            android.media.MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+            source,
             rate, android.media.AudioFormat.CHANNEL_IN_MONO, android.media.AudioFormat.ENCODING_PCM_16BIT,
             maxOf(min, chunk * 2 * 4),
         )

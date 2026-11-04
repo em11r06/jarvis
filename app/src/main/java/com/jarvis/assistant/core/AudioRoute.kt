@@ -60,6 +60,12 @@ object AudioRoute {
         ctx.getSystemService(AudioManager::class.java).getDevices(AudioManager.GET_DEVICES_OUTPUTS)
             .any { it.type in HEADSET_TYPES && !isWatch(it) && !isCar(ctx, it) }
 
+    /** Telefona görüşme yapabilen bir Bluetooth cihazı (araba, kulaklık, saat) bağlı mı? */
+    fun hasBluetoothComm(ctx: Context): Boolean = runCatching {
+        ctx.getSystemService(AudioManager::class.java).availableCommunicationDevices
+            .any { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO || it.type == AudioDeviceInfo.TYPE_BLE_HEADSET }
+    }.getOrDefault(false)
+
     /** Bluetooth kulaklığın mikrofonu (telefon görüşmesi modunda kullanılabilir), yoksa null. */
     fun bluetoothMic(ctx: Context): AudioDeviceInfo? =
         ctx.getSystemService(AudioManager::class.java).availableCommunicationDevices
