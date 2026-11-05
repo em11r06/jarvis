@@ -136,6 +136,7 @@ class AssistantController(
             return
         }
         if (busy.isLocked) return
+        warmUp()
         beforeListen?.invoke()
         busy.withLock {
             // Dinlerken müziği/videoyu kıs ki kullanıcıyı net duyalım.
@@ -257,6 +258,14 @@ class AssistantController(
             .setAutoCancel(true)
             .build()
         context.getSystemService(android.app.NotificationManager::class.java).notify((System.currentTimeMillis() % 100000).toInt() + 1000, n)
+    }
+
+    /** Konuşma başlarken gerekecek sunuculara bağlantıyı önceden aç (hız için). */
+    fun warmUp() {
+        val hosts = mutableListOf("generativelanguage.googleapis.com")
+        if (settings.provider == com.jarvis.assistant.data.Settings.PROVIDER_CLAUDE) hosts += "api.anthropic.com"
+        if (settings.ttsMode == com.jarvis.assistant.data.Settings.TTS_ELEVEN) hosts += "api.elevenlabs.io"
+        com.jarvis.assistant.ai.Http.warmUp(*hosts.toTypedArray())
     }
 
     /** Tek bir isteği işler: yapay zekaya sorar ve cevabı okur. */

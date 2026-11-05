@@ -47,18 +47,43 @@ class CloudListener(private val context: Context, private val settings: Settings
     /** Kullanıcının konuşma tarzı rehberi: sık kullandığı argo/kelimeleri doğru yazması için. */
     private val style get() = settings.styleGuide
 
-    suspend fun listen(startTimeoutMs: Long, onPartial: (String) -> Unit): Result {
-        val pcm = withContext(Dispatchers.IO) { record(startTimeoutMs, onPartial) } ?: return Result.NoSpeech
-        // Uyandıktan sonra konuşan kullanıcı değilse (TV, başka biri) yok say.
-        if (!com.jarvis.assistant.wake.VoiceId.commandIsUser(context, settings, pcm)) {
-            Log.d(TAG, "Konuşan kullanıcı değil, yok sayıldı")
-            return Result.NotUser
+    /** Kısa bir duraklamada çağrılır: o ana kadarki ses ve o ana kadarki konuşma çerçevesi sayısı. */
+    @Volatile private var onPause: ((ByteArray, Int) -> Unit)? = null
+    @Volatile private var lastVoiced = 0
+
+    suspend fun listen(startTimeoutMs: Long, onPartial: (String) -> Unit): Result = kotlinx.coroutines.coroutineScope {
+        // Hız: kullanıcı kısa bir duraklama yapınca yazıya dökmeye hemen başla. Konuşma gerçekten bittiyse
+        // (sonrasında yeni ses gelmediyse) hazır sonucu kullan; devam ettiyse at, baştan dök.
+        val spec = java.util.concurrent.atomic.AtomicReference<Pair<Int, kotlinx.coroutines.Deferred<kotlin.Result<String?>>>?>(null)
+        onPause = { pcm, voiced ->
+            if (voiced >= 10) {
+                val d = async(Dispatchers.IO) { runCatching { transcribe(pcm) } }
+                spec.getAndSet(voiced to d)?.second?.cancel()
+            }
         }
-        onPartial("Anlıyorum…")
-        val text = runCatching { transcribe(pcm) }
-            .onFailure { Log.w(TAG, "Gemini yazıya dökemedi", it) }
-            .getOrElse { return Result.Failed }
-        return if (text.isNullOrBlank()) Result.Unclear else Result.Text(Heard(text, emptyList(), 1f))
+        val pcm = try {
+            withContext(Dispatchers.IO) { record(startTimeoutMs, onPartial) }
+        } finally {
+            onPause = null
+        }
+        if (pcm == null) {
+            spec.get()?.second?.cancel()
+            return@coroutineScope Result.NoSpeech
+        }
+        val ready = spec.get()?.takeIf { it.first == lastVoiced }?.second
+        if (ready == null) spec.get()?.second?.cancel()
+        val textJob = ready ?: async(Dispatchers.IO) { runCatching { transcribe(pcm) } }
+        // Ses kontrolü yazıya dökmeyle aynı anda yapılır.
+        val isUser = async { com.jarvis.assistant.wake.VoiceId.commandIsUser(context, settings, pcm) }
+        withContext(Dispatchers.Main) { onPartial("Anlıyorum…") }
+        if (!isUser.await()) {
+            textJob.cancel()
+            Log.d(TAG, "Konuşan kullanıcı değil, yok sayıldı")
+            return@coroutineScope Result.NotUser
+        }
+        val text = textJob.await().onFailure { Log.w(TAG, "Gemini yazıya dökemedi", it) }
+            .getOrElse { return@coroutineScope Result.Failed }
+        if (text.isNullOrBlank()) Result.Unclear else Result.Text(Heard(text, emptyList(), 1f))
     }
 
     /** Ses tanıtma için tek bir cümle kaydeder (komutlarla aynı yoldan, aynı ayarlarla). */
@@ -157,6 +182,7 @@ class CloudListener(private val context: Context, private val settings: Settings
                 out.write(bytes)
                 if (loud) voiced++
                 silenceMs = if (loud) 0 else silenceMs + 20
+                if (silenceMs == SPECULATE_MS) onPause?.invoke(out.toByteArray(), voiced)
                 if (silenceMs >= END_SILENCE_MS || out.size() >= rate * 2 * MAX_SECONDS) break
             }
         } finally {
@@ -167,6 +193,7 @@ class CloudListener(private val context: Context, private val settings: Settings
         }
         // Çok kısa ses (öksürük, tık) konuşma sayılmaz.
         // Çok kısa ses (öksürük, tık, kapı) konuşma sayılmaz: en az ~0,4 sn gerçek ses olmalı.
+        lastVoiced = voiced
         return out.toByteArray().takeIf { started && voiced >= 10 }
     }
 
@@ -269,7 +296,9 @@ class CloudListener(private val context: Context, private val settings: Settings
         private const val TAG = "JarvisCloudStt"
         private const val SAMPLE_RATE = 16000
         /** Sohbette düşünürken verilen kısa duraklamalarda kesmesin. */
-        private const val END_SILENCE_MS = 1600
+        private const val END_SILENCE_MS = 1300
+        /** Bu kadar sessizlikte yazıya dökmeye önceden başlanır (20'nin katı olmalı). */
+        private const val SPECULATE_MS = 600
         private const val MAX_SECONDS = 60
         /** Hızlı ve ucuz modeller; ses anlama hepsinde var. */
         /** Ses tanımada doğruluk önemli: önce tam Flash modelleri, kota dolarsa hafif (Lite) modeller. */

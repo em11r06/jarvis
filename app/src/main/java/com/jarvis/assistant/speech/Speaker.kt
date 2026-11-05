@@ -145,31 +145,107 @@ class Speaker(private val context: Context, private val settings: Settings) {
      * Böylece uzun cevaplarda beklemeden konuşmaya başlar.
      * @return başarıyla okunan cümle sayısı; ilk cümle bile alınamadıysa -1
      */
+    /**
+     * Hızlı yol: ses ElevenLabs'ten ham PCM olarak akarken çalınır (dosyanın inmesi beklenmez).
+     * İlk cümle akış hâlinde çalarken sonraki cümle arka planda indirilir.
+     */
     private suspend fun speakElevenStreamed(text: String, voiceId: String): Int = coroutineScope {
         val parts = splitSentences(text)
         fun fetch(i: Int) = async(Dispatchers.IO) {
-            runCatching {
-                downloadEleven(
-                    parts[i], voiceId,
-                    previous = parts.getOrNull(i - 1),
-                    next = parts.getOrNull(i + 1),
-                )
+            runCatching { elevenPcm(parts[i], voiceId, parts.getOrNull(i - 1), parts.getOrNull(i + 1)) { _, _ -> } }
+        }
+        var done = 0
+        // İlk cümle: gelen ses parçaları anında çalınır.
+        var next = if (parts.size > 1) fetch(1) else null
+        val first = runCatching {
+            val track = PcmPlayer(PCM_RATE, attrs)
+            currentPcm = track
+            try {
+                elevenPcm(parts[0], voiceId, null, parts.getOrNull(1)) { chunk, n -> track.write(chunk, n) }
+                track.finish()
+            } finally {
+                track.release()
+                if (currentPcm === track) currentPcm = null
             }
         }
-        var next = fetch(0)
-        var done = 0
-        for (i in parts.indices) {
-            val file = next.await().onFailure { Log.w(TAG, "ElevenLabs başarısız", it) }.getOrNull()
-                ?: return@coroutineScope if (done == 0) -1 else done
-            if (i + 1 < parts.size) next = fetch(i + 1)
+        if (first.isFailure) {
+            if (first.exceptionOrNull() is kotlinx.coroutines.CancellationException) throw first.exceptionOrNull()!!
+            Log.w(TAG, "ElevenLabs başarısız", first.exceptionOrNull())
+            next?.cancel()
+            return@coroutineScope -1
+        }
+        done++
+        for (i in 1 until parts.size) {
+            val pcm = next!!.await().onFailure { Log.w(TAG, "ElevenLabs başarısız", it) }.getOrNull()
+                ?: return@coroutineScope done
+            next = if (i + 1 < parts.size) fetch(i + 1) else null
+            val track = PcmPlayer(PCM_RATE, attrs)
+            currentPcm = track
             try {
-                playFile(file)
+                track.write(pcm, pcm.size)
+                track.finish()
             } finally {
-                file.delete()
+                track.release()
+                if (currentPcm === track) currentPcm = null
             }
             done++
         }
         done
+    }
+
+    @Volatile private var currentPcm: PcmPlayer? = null
+
+    /**
+     * ElevenLabs akış uç noktasından ham 16 bit PCM ister. onChunk verilirse parçalar geldikçe ona verilir,
+     * her durumda tüm ses bayt dizisi olarak döner.
+     */
+    private suspend fun elevenPcm(
+        text: String, voiceId: String, previous: String?, next: String?,
+        onChunk: (ByteArray, Int) -> Unit,
+    ): ByteArray = withContext(Dispatchers.IO) {
+        val model = settings.elevenModel.ifBlank { Settings.ELEVEN_FAST }
+        val body = JSONObject()
+            .put("text", text)
+            .put("model_id", model)
+            .put(
+                "voice_settings",
+                JSONObject()
+                    .put("stability", 0.4)
+                    .put("similarity_boost", 0.8)
+                    .put("style", 0.2)
+                    .put("use_speaker_boost", true)
+                    .put("speed", settings.ttsRate.coerceIn(0.7f, 1.2f).toDouble()),
+            )
+        previous?.let { body.put("previous_text", it) }
+        next?.let { body.put("next_text", it) }
+        if (model.endsWith("v2_5")) body.put("language_code", "tr")
+        val req = Request.Builder()
+            .url("https://api.elevenlabs.io/v1/text-to-speech/$voiceId/stream?output_format=pcm_$PCM_RATE&optimize_streaming_latency=3")
+            .header("xi-api-key", settings.elevenKey)
+            .post(body.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+        Http.client.newCall(req).execute().use { res ->
+            if (!res.isSuccessful) throw ElevenException.from(res.code, res.body?.string().orEmpty())
+            val all = java.io.ByteArrayOutputStream()
+            val input = res.body!!.byteStream()
+            val buf = ByteArray(8192)
+            var carry = -1 // tek kalan bayt (16 bit örnek ikiye bölünmesin)
+            while (true) {
+                val n = input.read(buf)
+                if (n < 0) break
+                all.write(buf, 0, n)
+                var data = buf
+                var len = n
+                if (carry >= 0) {
+                    data = ByteArray(n + 1).also { it[0] = carry.toByte(); System.arraycopy(buf, 0, it, 1, n) }
+                    len = n + 1
+                    carry = -1
+                }
+                if (len % 2 == 1) { carry = data[len - 1].toInt() and 0xFF; len-- }
+                if (len > 0) onChunk(data, len)
+            }
+            all.toByteArray()
+        }
     }
 
     /** Metni cümlelere böler; çok kısa parçaları bir sonrakiyle birleştirir. */
@@ -360,6 +436,8 @@ class Speaker(private val context: Context, private val settings: Settings) {
     }
 
     fun stop() {
+        currentPcm?.let { runCatching { it.release() } }
+        currentPcm = null
         runCatching { tts?.stop() }
         pending.values.forEach { it.complete(Unit) }
         pending.clear()
@@ -382,6 +460,8 @@ class Speaker(private val context: Context, private val settings: Settings) {
     }
 
     private companion object {
+        /** ElevenLabs akış sesi örnekleme hızı (her planda kullanılabilen ham PCM). */
+        const val PCM_RATE = 22050
         const val TAG = "JarvisSpeaker"
     }
 }
@@ -410,5 +490,57 @@ class ElevenException(message: String) : Exception(message) {
             }
             return ElevenException("$text\n(Ayrıntı: $raw)")
         }
+    }
+}
+
+
+/** Ham PCM sesini akış hâlinde çalan küçük oynatıcı (ElevenLabs akışı için). */
+internal class PcmPlayer(private val rate: Int, attrs: AudioAttributes) {
+    private val track: android.media.AudioTrack = android.media.AudioTrack.Builder()
+        .setAudioAttributes(attrs)
+        .setAudioFormat(
+            android.media.AudioFormat.Builder()
+                .setEncoding(android.media.AudioFormat.ENCODING_PCM_16BIT)
+                .setSampleRate(rate)
+                .setChannelMask(android.media.AudioFormat.CHANNEL_OUT_MONO)
+                .build(),
+        )
+        .setTransferMode(android.media.AudioTrack.MODE_STREAM)
+        .setBufferSizeInBytes(
+            maxOf(
+                android.media.AudioTrack.getMinBufferSize(rate, android.media.AudioFormat.CHANNEL_OUT_MONO, android.media.AudioFormat.ENCODING_PCM_16BIT),
+                rate, // ~0,5 sn
+            ),
+        )
+        .build()
+    private var frames = 0L
+    @Volatile private var released = false
+
+    fun write(data: ByteArray, len: Int) {
+        if (released) throw kotlinx.coroutines.CancellationException("durduruldu")
+        if (track.playState != android.media.AudioTrack.PLAYSTATE_PLAYING) track.play()
+        var off = 0
+        while (off < len && !released) {
+            val w = track.write(data, off, len - off)
+            if (w <= 0) break
+            off += w
+        }
+        frames += len / 2
+    }
+
+    /** Yazılan ses bitene kadar bekler. */
+    suspend fun finish() {
+        if (frames == 0L || released) return
+        val limit = System.currentTimeMillis() + frames * 1000 / rate + 1500
+        while (!released && track.playbackHeadPosition < frames && System.currentTimeMillis() < limit) {
+            kotlinx.coroutines.delay(30)
+        }
+    }
+
+    fun release() {
+        if (released) return
+        released = true
+        runCatching { track.pause(); track.flush() }
+        runCatching { track.release() }
     }
 }

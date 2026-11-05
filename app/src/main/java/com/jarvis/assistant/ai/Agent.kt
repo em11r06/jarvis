@@ -78,7 +78,7 @@ class Agent(
         onInterimText: suspend (String) -> Unit,
     ): String {
         repeat(MAX_STEPS) {
-            val reply = fixFakeCall(complete(systemPrompt(), history.turns.toList(), tools).turn)
+            val reply = fixFakeCall(complete(systemPrompt(), withTime(history.turns.toList()), tools).turn)
             history.turns += reply
             history.save()
 
@@ -174,14 +174,23 @@ class Agent(
         }
     }
 
-    private fun systemPrompt(): String {
+    /** Son kullanıcı mesajının başına şu anki tarih ve saati ekler (sadece gönderilen kopyada). */
+    private fun withTime(turns: List<Turn>): List<Turn> {
+        val i = turns.indexOfLast { it is Turn.User }
+        if (i < 0) return turns
         val now = SimpleDateFormat("d MMMM yyyy EEEE HH:mm", Locale("tr", "TR")).format(Date())
+        val u = turns[i] as Turn.User
+        return turns.toMutableList().also { it[i] = u.copy(text = "[Şu an: $now]\n${u.text}") }
+    }
+
+    private fun systemPrompt(): String {
         val summary = if (history.summary.isNotBlank()) "\n\nÖnceki konuşmaların özeti: ${history.summary}" else ""
         val style = settings.styleGuide.takeIf { it.isNotBlank() }?.let {
             "\n\nKullanıcının kendi konuşma tarzı aşağıda. Onunla bu tarzda, onun gibi konuş (kelimeleri, hitapları, enerjisi). " +
                 "Ama sesli okunacağı için düzgün Türkçe karakterlerle yaz, yazım hatalarını taklit etme:\n$it"
         }.orEmpty()
-        return SYSTEM_PROMPT + "\n\nŞu an: $now." + summary + style
+        // Saat burada değil, son kullanıcı mesajına eklenir: talimatlar sabit kalınca Gemini önbelleği kullanır, cevap hızlanır.
+        return SYSTEM_PROMPT + summary + style
     }
 
     /** Araçsız, tek seferlik soru (ör. konuşma tarzı analizi). */

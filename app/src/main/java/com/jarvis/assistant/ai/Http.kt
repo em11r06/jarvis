@@ -18,6 +18,21 @@ object Http {
 
     private val JSON = "application/json; charset=utf-8".toMediaType()
 
+    /**
+     * Bağlantıyı önceden ısıtır: kullanıcı konuşurken sunucuyla güvenli bağlantı kurulmuş olur,
+     * asıl istek gelince bekleme olmaz (OkHttp bağlantıyı birkaç dakika açık tutar).
+     */
+    fun warmUp(vararg hosts: String) {
+        hosts.forEach { h ->
+            runCatching {
+                client.newCall(Request.Builder().url("https://$h/").head().build()).enqueue(object : okhttp3.Callback {
+                    override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {}
+                    override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) { response.close() }
+                })
+            }
+        }
+    }
+
     data class Result(val code: Int, val body: String)
 
     suspend fun postJson(url: String, body: String, headers: Map<String, String>): Result =

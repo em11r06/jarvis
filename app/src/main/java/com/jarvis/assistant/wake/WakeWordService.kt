@@ -122,6 +122,7 @@ class WakeWordService : Service() {
         val speaker = JarvisApp.instance.assistant.speaker
         // Müziği/videoyu hemen kıs; oturum bitene kadar kısık kalsın.
         speaker.pauseMedia()
+        JarvisApp.instance.assistant.warmUp()
         playWakeSound(applicationContext)
         try {
             JarvisApp.instance.assistant.voiceSession()
