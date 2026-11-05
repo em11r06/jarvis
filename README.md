@@ -184,6 +184,15 @@ duyulmalı ve ses senin sesine benzemeli; Jarvis kendi kendine "öğrenmez". Uya
 o ses yok sayılır. Seni zor tanıyorsa seçiciliği biraz düşür ya da sessiz bir yerde yeniden kaydet.
 Tek heceli kelimeler ("can") günlük konuşmada çok geçtiği için "hey can" gibi iki kelimelik bir ifade öner.
 
+### Otomatik görevler (arka planda nöbet)
+Jarvis'e ileride kendiliğinden yapacağı işler söyleyebilirsin; o an telefonla uğraşmasan da yapar:
+- Saatli: "Her sabah yedide bana hava durumunu söyle", "Hafta içi 18:30'da trafiği söyle", "Yirmi dakika sonra çamaşırı hatırlat".
+- Mesajla: "Annem yazınca mesajı bana sesli oku", "Ahmet 'geldim' yazarsa haber ver", "Kargo bildirimi gelince söyle",
+  "Patron yazınca 'birazdan dönerim' diye cevap ver".
+Görevler Ayarlar > Otomatik görevler'de listelenir, oradan ya da sesle ("görevlerimi söyle", "ikinci görevi sil") silinir.
+Mesaj görevleri bildirim erişimi ister. Sonuç sesli söylenir ve bildirim olarak da gelir. Ekranda iş gerektiren görevler
+(ör. uygulama içinde bir şey yapmak) telefon kilitliyken yapılamaz.
+
 ## 5. Kullanım örnekleri
 
 - "Jarvis... nasılsın?" (sohbet)

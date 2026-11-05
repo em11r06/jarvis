@@ -213,6 +213,52 @@ class AssistantController(
         return listener.listen(timeout) { _partial.value = it }
     }
 
+    /**
+     * Otomatik görevi çalıştırır (saat geldi ya da beklenen mesaj geldi). Kullanıcı o an konuşmuyor:
+     * sonuç sesli söylenir (görev öyle kurulduysa) ve bildirim olarak da gösterilir.
+     */
+    fun runAutomation(a: com.jarvis.assistant.auto.Automation, trigger: String) {
+        scope.launch {
+            busy.withLock {
+                val prompt = "[OTOMATİK GÖREV] Kullanıcı şu an seninle konuşmuyor. Bu görevi kendisi önceden kurdu ve onayladı; " +
+                    "tekrar onay sorma, soru sorma, işi yap.\nGörev: ${a.task}\nTetikleyen: $trigger\n" +
+                    "İşi bitirince kullanıcıya söylenecek kısa bir cümle yaz (görev bir şey okumak/söylemekse onu söyle)."
+                val answer = try {
+                    if (!Network.isOnline(context)) offline.handle(a.task) ?: OfflineBrain.NO_INTERNET
+                    else agent.ask(prompt)
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    Log.w("Jarvis", "Otomatik görev hatası", e)
+                    "Otomatik görev yapılamadı (${a.name}): ${e.message}"
+                }
+                addBubble(ChatBubble(false, answer))
+                notifyResult(a.name, answer)
+                if (a.speak) {
+                    _state.value = AssistantState.SPEAKING
+                    speaker.speak(answer)
+                    _state.value = AssistantState.IDLE
+                }
+            }
+        }
+    }
+
+    private fun notifyResult(title: String, text: String) = runCatching {
+        com.jarvis.assistant.wake.WakeWordService.createChannels(context)
+        val open = android.app.PendingIntent.getActivity(
+            context, 3, android.content.Intent(context, com.jarvis.assistant.MainActivity::class.java),
+            android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val n = android.app.Notification.Builder(context, "jarvis_alert")
+            .setSmallIcon(com.jarvis.assistant.R.drawable.ic_notification)
+            .setContentTitle("Jarvis · $title")
+            .setContentText(text)
+            .setStyle(android.app.Notification.BigTextStyle().bigText(text))
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .build()
+        context.getSystemService(android.app.NotificationManager::class.java).notify((System.currentTimeMillis() % 100000).toInt() + 1000, n)
+    }
+
     /** Tek bir isteği işler: yapay zekaya sorar ve cevabı okur. */
     /**
      * Tanıyıcı emin değilse diğer tahminleri yapay zekaya not olarak ekler;

@@ -16,6 +16,9 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Otomatik görevlerin tam saatinde çalışması için -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
 
     <!-- Telefon özelliği zorunlu değil (tablette de kurulabilsin) -->
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
@@ -131,6 +134,9 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <receiver
+            android:name=".auto.AutomationReceiver"
+            android:exported="false" />
         <receiver
             android:name=".wake.BootReceiver"
             android:exported="true">

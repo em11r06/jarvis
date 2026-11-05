@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.layout.Arrangement
@@ -88,6 +89,7 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
     var cloudStt by remember { mutableStateOf(s.cloudStt) }
     var headsetMode by remember { mutableStateOf(s.headsetMicMode) }
     var carNames by remember { mutableStateOf(s.carNames) }
+    var autos by remember { mutableStateOf(com.jarvis.assistant.auto.Automations.all(context)) }
     var wordsChanged by remember { mutableStateOf(false) }
     var testingWake by remember { mutableStateOf(false) }
     var hasTr by remember { mutableStateOf(com.jarvis.assistant.wake.VoskModels.hasTurkish(context)) }
@@ -178,6 +180,7 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
             else -> "Kayıt yok"
         }
         "style" -> if (styleGuide.isNotBlank()) "Öğrenildi ✓" else "Henüz yok"
+        "auto" -> autos.size.let { if (it == 0) "Görev yok" else "$it görev" }
         "phone" -> if (Permissions.notificationAccess(context)) "Bildirim erişimi açık" else "Bildirim erişimi kapalı"
         "system" -> "Sürüm ${Updater.currentVersion}"
         else -> ""
@@ -567,6 +570,32 @@ fun SettingsScreen(onBack: () -> Unit, onVoice: () -> Unit, onSetup: () -> Unit)
                 }
 
                 }
+                "auto" -> {
+                SectionTitle("Otomatik görevler")
+                Text(
+                    "Jarvis arka planda nöbet tutar: belli bir saatte ya da belli bir mesaj/bildirim gelince istediğinizi kendiliğinden yapar. " +
+                        "Görev eklemek için Jarvis'e söyleyin, örneğin: \"Her sabah yedide bana hava durumunu söyle\", " +
+                        "\"Annem yazınca mesajı bana sesli oku\", \"Kargo bildirimi gelince haber ver\", \"Yirmi dakika sonra çamaşırı hatırlat\".",
+                    fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (!Permissions.notificationAccess(context)) Text(
+                    "Mesajla çalışan görevler için bildirim erişimi gerekli (Telefon ve mesajlar sayfası).",
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 4.dp),
+                )
+                if (autos.isEmpty()) Text("Henüz görev yok.", color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(top = 10.dp))
+                autos.forEach { a ->
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text(a.name, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
+                            Text(a.describe(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                        }
+                        TextButton(onClick = {
+                            com.jarvis.assistant.auto.Automations.remove(context, a.id)
+                            autos = com.jarvis.assistant.auto.Automations.all(context)
+                        }) { Text("Sil") }
+                    }
+                }
+                }
                 "offline" -> {
                 SectionTitle("İnternetsiz sohbet")
                 val nanoStatus by com.jarvis.assistant.ai.NanoModel.status.collectAsStateWithLifecycle()
@@ -680,6 +709,7 @@ private val SECTIONS = listOf(
     SettingsSection("wake", "Uyandırma", Icons.Default.Hearing),
     SettingsSection("voiceid", "Sesimi tanı", Icons.Default.Fingerprint),
     SettingsSection("style", "Konuşma tarzım", Icons.Default.Forum),
+    SettingsSection("auto", "Otomatik görevler", Icons.Default.Schedule),
     SettingsSection("phone", "Telefon ve mesajlar", Icons.Default.PhoneAndroid),
     SettingsSection("offline", "İnternetsiz", Icons.Default.CloudOff),
     SettingsSection("system", "Güncelleme ve yedek", Icons.Default.SystemUpdate),

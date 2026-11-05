@@ -61,7 +61,11 @@ class JarvisNotificationService : NotificationListenerService() {
         if (sbn.packageName == packageName) return
         if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
         if (n.flags and Notification.FLAG_ONGOING_EVENT != 0) return
-        runCatching { MessageLog.add(this, extract(sbn)) }.onFailure { Log.w(TAG, "Bildirim kaydedilemedi", it) }
+        runCatching {
+            val fresh = MessageLog.add(this, extract(sbn))
+            // Mesajla tetiklenen otomatik görevler (ör. "Ahmet yazınca bana oku").
+            com.jarvis.assistant.auto.Automations.onMessages(applicationContext, fresh)
+        }.onFailure { Log.w(TAG, "Bildirim kaydedilemedi", it) }
     }
 
     private fun extract(sbn: StatusBarNotification): List<StoredMessage> {
@@ -140,8 +144,8 @@ object MessageLog {
     private fun file(ctx: Context) = File(ctx.filesDir, "messages.jsonl")
 
     @Synchronized
-    fun add(ctx: Context, items: List<StoredMessage>) {
-        if (items.isEmpty()) return
+    fun add(ctx: Context, items: List<StoredMessage>): List<StoredMessage> {
+        if (items.isEmpty()) return emptyList()
         val f = file(ctx)
         // Aynı mesaj güncellenen bildirimde tekrar gelir; son görülenlerle karşılaştır.
         val fresh = items.filter { m ->
@@ -152,9 +156,10 @@ object MessageLog {
                 true
             }
         }
-        if (fresh.isEmpty()) return
+        if (fresh.isEmpty()) return emptyList()
         f.appendText(fresh.joinToString("") { it.toJson() + "\n" })
         trimIfNeeded(f)
+        return fresh
     }
 
     private fun trimIfNeeded(f: File) {

@@ -25,6 +25,9 @@ object ToolRegistry {
         PanoyaKopyalaTool(),
         // Sistem
         AlarmKurTool(),
+        GorevEkleTool(),
+        GorevleriListeleTool(),
+        GorevSilTool(),
         ZamanlayiciKurTool(),
         FenerTool(),
         SaatTarihTool(),

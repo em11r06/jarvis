@@ -12,6 +12,8 @@ import com.jarvis.assistant.JarvisApp
  */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        // Saatli otomatik görevler yeniden başlatmada silinir: yeniden kur.
+        runCatching { com.jarvis.assistant.auto.Automations.rescheduleAll(context.applicationContext) }
         val settings = JarvisApp.instance.settings
         if (!settings.wakeEnabled || WakeWordService.isRunning.value) return
         WakeWordService.showTapToStart(context)
