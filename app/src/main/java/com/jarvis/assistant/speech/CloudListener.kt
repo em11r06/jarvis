@@ -11,6 +11,7 @@ import com.jarvis.assistant.ai.GeminiQuota
 import com.jarvis.assistant.ai.Http
 import com.jarvis.assistant.data.Settings
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
